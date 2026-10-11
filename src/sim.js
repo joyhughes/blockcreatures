@@ -63,6 +63,8 @@ export const TASKS = {
 //   maxVolume  contestants are scaled down to at most this volume (m^3)
 //   grip       Sims' control bonus: touching the ball on the far side from your own centre of mass
 //              (wrapping around it) shortens your distance by up to the ball's radius
+//   metric     competition's distance to the ball: 'com' (Sims) = from the centre of mass to the
+//              ball's centre; 'surface' = from the nearest part, so any touch counts as 0
 //   settle     on land, before scoring: 'stable' (Sims) = no friction and no muscles until the
 //              centre of mass stops dropping; 'timed' = the task's fixed settle time, friction on
 //   goalDist   cooperation: the goal's centre, this far from the ball's start (m), away from the creatures
@@ -70,16 +72,16 @@ export const TASKS = {
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 0.6, grip: true,
-  settle: 'stable', goalDist: 3, goalSize: 0.6,
+  settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'com',
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed' };
+export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface' };
 // a task's default scene: SCENE with the task's own ball
 export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed' };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface' };
   const legacy = TASKS[taskName].kind === 'cooperate' ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -873,8 +875,9 @@ export class Sim {
       return cs.map(() => f);
     }
     if (task.kind === 'compete') {
-      const cube = this.cubePos();
-      const d = this.creatures.map((c, i) => (c.valid && !this.failed[i] ? c.distanceTo(cube) - (this.scene.grip ? this.grip(c) : 0) : Infinity));
+      const cube = this.cubePos(), com = this.scene.metric === 'com';
+      const dist = c => (com ? len(sub(c.com(), cube)) : c.distanceTo(cube)) - (this.scene.grip ? this.grip(c) : 0);
+      const d = this.creatures.map((c, i) => (c.valid && !this.failed[i] ? dist(c) : Infinity));
       if (d.length < 2) return [d[0] === Infinity ? 0 : 1];
       const [a, b] = d;
       // a blown-up simulation can't be blamed on one side: nobody scores
