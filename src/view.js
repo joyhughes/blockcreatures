@@ -206,7 +206,7 @@ export class View {
       this.focus.copy(goal);
       this.controls.target.copy(this.focus);
       const sim = sims[0];
-      const d = crowd ? Math.max(6, 0.9 * this.gridSize + 2 * big) : sim.cube ? Math.max(8, 1.25 * this.arena) : Math.max(4, 3 * big);
+      const d = crowd ? Math.max(6, 0.9 * this.gridSize + 2 * big) : sim.cube ? Math.max(3.5, (sim.coop ? 1 : 0.7) * this.arena) : Math.max(4, 3 * big);
       this.crowdDist = d;
       this.wantDist = undefined;
       if (sim.light && !crowd) {
