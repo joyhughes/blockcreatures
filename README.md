@@ -328,6 +328,7 @@ radial jumper's 0.71 J/kg (most of it on landing; at most 4 cm of its height).
 | Following (water) | free | 300 | 0.12–0.39 m/s closing, from all 8 test directions |
 | Following (land) | free | 150 | 0.17–0.45 m/s closing from 7 of 8 directions (−0.08 from the eighth); chosen as the most robust of the last 20 generation bests, none of which may trip the energy audit in any of 24 runs |
 | Competition | free, ball scene | 150 | 1.40 average in a round robin of every 10th generation's best (gen 59 edges it at 1.48 but only ties its bout); shown beating the next strongest 1.50 to 0.50 |
+| Cooperation | free, two teams, from the competition champion | 60 | 1.42: the ball goes in at 8.8 s of 15; alone, neither scores a goal (0.61 and 0.71) |
 | Swimming | radial ×5, round | 150 | 0.74 m/s |
 | Swimming | bilateral, round | 150 | 0.63 m/s |
 | Swimming | radial ×6, from the tentacle example | 150 | 0.67 m/s |
