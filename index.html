@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Block Creatures</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='1' y='6' width='8' height='6' fill='%23e8b04a'/%3E%3Crect x='9' y='3' width='6' height='4' fill='%234fa3d9'/%3E%3C/svg%3E">
+<script type="importmap">
+{ "imports": {
+  "three": "./vendor/three/three.module.js",
+  "three/addons/": "./vendor/three/addons/"
+} }
+</script>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1b1f26; --line: #2c323c; --text: #d9dde4; --muted: #8b93a1;
+    --accent: #e8b04a; --accent2: #4fa3d9;
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+  body { display: grid; grid-template-columns: 1fr 340px; height: 100vh; overflow: hidden; }
+  #stage { position: relative; min-width: 0; }
+  #view { width: 100%; height: 100%; display: block; }
+  #hud { position: absolute; left: 14px; top: 12px; pointer-events: none; text-shadow: 0 1px 3px #000a; }
+  #hud .title { font-size: 15px; font-weight: 600; }
+  #hud .sub { color: #e6e9ee; opacity: .85; font-variant-numeric: tabular-nums; }
+  #replaybar { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 6px; align-items: center; }
+  #replaybar .lbl { display: flex; gap: 5px; align-items: center; background: #232831; border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; }
+  #record.rec { border-color: #d9534f; color: #fff; background: #4a1f1f; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 14px 24px; }
+  h1 { font-size: 16px; margin: 0 0 2px; letter-spacing: .02em; }
+  .lede { color: var(--muted); margin: 0 0 12px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+  .tasks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tasks button { text-align: left; padding: 7px 9px; }
+  .tasks button.on, .seg button.on { border-color: var(--accent); color: #fff; background: #2a2618; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  button, select, input { font: inherit; color: var(--text); background: #232831; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
+  button { cursor: pointer; }
+  button:hover { border-color: #46505e; }
+  button.primary { background: var(--accent); color: #1b1608; border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row label { color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  input[type=number] { width: 72px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+  .stat { background: #20252d; border-radius: 6px; padding: 6px 8px; }
+  .stat b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 11px; }
+  #chart { width: 100%; height: 130px; display: block; background: #171a20; border-radius: 6px; }
+  .legend { color: var(--muted); font-size: 11px; margin-top: 4px; display: flex; gap: 12px; }
+  .legend i { display: inline-block; width: 10px; height: 2px; vertical-align: middle; margin-right: 4px; }
+  #gens { max-height: 180px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
+  #gens div { display: flex; justify-content: space-between; padding: 3px 8px; cursor: pointer; font-variant-numeric: tabular-nums; }
+  #gens div:hover { background: #262b34; }
+  #gens div.on { background: #2a2618; color: #fff; }
+  #graph { width: 100%; height: 200px; display: block; background: #171a20; border-radius: 6px; }
+  .note { color: var(--muted); font-size: 12px; }
+  #islandList { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  #islandList div { background: #20252d; border-radius: 6px; padding: 4px 7px; cursor: pointer; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
+  #islandList div:hover { border-color: #46505e; }
+  #islandList i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
+  #islandList span { color: var(--muted); font-size: 11px; }
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="view"></canvas>
+  <div id="hud"><div class="title" id="hudTitle"></div><div class="sub" id="hudSub"></div></div>
+  <div id="replaybar">
+    <button id="restart" title="Restart replay">⟲ Restart</button>
+    <button id="record" title="Record the replay from the start as a video; click again to stop early">● Record</button>
+    <select id="show" title="Which creatures to show">
+      <option value="best" selected>Best</option>
+      <option value="islands">Island bests</option>
+      <option value="top">Top 25</option>
+      <option value="all">Whole population</option>
+    </select>
+    <label class="lbl" title="Labels over creatures shown side by side"><input type="checkbox" id="labels" checked> Labels</label>
+    <select id="speed" title="Playback speed">
+      <option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option>
+    </select>
+  </div>
+</div>
+<aside>
+  <h1>Block Creatures</h1>
+  <p class="lede">Evolving virtual creatures after Karl Sims (1994): morphology and neural control evolved together as directed graphs.</p>
+
+  <h2>Evolutionary target</h2>
+  <div class="tasks" id="tasks"></div>
+
+  <h2>Body plan</h2>
+  <div class="seg" id="plan">
+    <button data-plan="free" class="on" title="Sims' original: any shape, per-connection reflection">Free</button>
+    <button data-plan="bilateral" title="Mirror-symmetric about a midplane">Bilateral</button>
+    <button data-plan="radial" title="N-fold rotational symmetry about a vertical axis">Radial</button>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <label id="nWrap" hidden>Arms <select id="radialN"><option>3</option><option>4</option><option selected>5</option><option>6</option><option>8</option></select></label>
+    <label title="Genes may choose capsules and spheres as well as boxes; chains of capsules become tentacles"><input type="checkbox" id="round"> Round parts</label>
+    <label title="Only creatures with an appendage at least this many segments long are viable: jellyfish and octopus arms">Min arm <select id="minArm"><option value="0">any</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>8</option></select></label>
+  </div>
+  <p class="note" id="planNote"></p>
+
+  <h2>Evolution</h2>
+  <div class="row">
+    <label>Population <input type="number" id="pop" value="300" min="20" max="2000" step="10"></label>
+    <label>Seed <input type="number" id="seed" value="1" min="1"></label>
+    <label title="Sub-populations that select and mate separately; each island's best migrates to the next every 10 generations. 1 = Sims' single population">Islands <select id="islands"><option>1</option><option>2</option><option>4</option><option selected>6</option><option>8</option><option>12</option></select></label>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <label title="How much selection rewards bodies unlike the rest of the population (all islands) and past novel bodies. Each island's two fittest always survive. 0 = fitness only">Novelty <select id="novelty"><option value="0">0</option><option value="0.15">0.15</option><option value="0.3" selected>0.3</option><option value="0.5">0.5</option><option value="0.7">0.7</option></select></label>
+    <label title="Share of mutants given one structural change: a new limb, a duplicated segment, a chain, a moved attachment, a new joint or shape, a resized part">New structures <select id="structural"><option value="0">off</option><option value="0.1">10%</option><option value="0.25" selected>25%</option><option value="0.5">50%</option></select></label>
+    <label title="Generations between migrations of each island's best to the next island. Frequent migration makes islands alike">Migrate <select id="migrate"><option value="10">every 10</option><option value="30" selected>every 30</option><option value="100">every 100</option><option value="0">never</option></select></label>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button class="primary" id="go">Evolve</button>
+    <button id="reset">New run</button>
+    <button id="champ" title="Replay a creature evolved earlier for this target and body plan">Champion</button>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <select id="examples" title="Replay an example creature"><option value="">Examples…</option></select>
+    <button id="seedFrom" title="New run seeded with mutants of the creature on screen">Evolve from this</button>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="sGen">–</b><span>generation</span></div>
+    <div class="stat"><b id="sBest">–</b><span id="sUnit">best</span></div>
+    <div class="stat"><b id="sRate">–</b><span>evals / s</span></div>
+  </div>
+
+  <h2>Fitness</h2>
+  <canvas id="chart"></canvas>
+  <div class="legend"><span><i style="background:var(--accent)"></i>best</span><span><i style="background:var(--accent2)"></i>mean</span></div>
+
+  <div id="islandBox" hidden>
+    <h2>Islands</h2>
+    <div id="islandList"></div>
+    <div class="row" style="margin-top:8px">
+      <button id="mate" title="Cross every island's best with every other island's best; show the hybrids and add the best to the islands">Mate island bests</button>
+    </div>
+    <p class="note" id="mateNote"></p>
+  </div>
+
+  <h2>Best of each generation</h2>
+  <div id="gens"></div>
+  <div class="row" style="margin-top:8px">
+    <label><input type="checkbox" id="follow" checked> Watch latest</label>
+  </div>
+
+  <h2>Genotype</h2>
+  <svg id="graph"></svg>
+  <p class="note" id="graphNote"></p>
+
+  <h2>Save</h2>
+  <div class="row">
+    <button id="save">Save run</button>
+    <label class="note" style="cursor:pointer"><input type="file" id="load" accept=".json" hidden><span style="text-decoration:underline">Load run…</span></label>
+  </div>
+</aside>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

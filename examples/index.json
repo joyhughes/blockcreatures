@@ -1,0 +1,34 @@
+[
+ {
+  "file": "tentacles.json",
+  "label": "Tentacles (hand-built, radial ×6)"
+ },
+ {
+  "file": "../champions/swim-radial5-round.json",
+  "label": "Swimming · radial ×5, round parts"
+ },
+ {
+  "file": "../champions/swim-bilateral-round.json",
+  "label": "Swimming · bilateral, round parts"
+ },
+ {
+  "file": "../champions/followWater-bilateral-round.json",
+  "label": "Following (water) · bilateral, round parts"
+ },
+ {
+  "file": "../champions/walk-radial5-round.json",
+  "label": "Walking · radial ×5, round parts"
+ },
+ {
+  "file": "../champions/walk-bilateral-round.json",
+  "label": "Walking · bilateral, round parts"
+ },
+ {
+  "file": "../champions/jump-radial4-round.json",
+  "label": "Jumping · radial ×4, round parts"
+ },
+ {
+  "file": "../champions/swim-radial6-round-seeded.json",
+  "label": "Swimming · radial ×6, round parts, from tentacles"
+ }
+]

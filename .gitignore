@@ -1,0 +1,5 @@
+node_modules/
+.DS_Store
+# headless run histories are large and regenerable; the regression baseline is kept
+runs/*
+!runs/baseline.json
