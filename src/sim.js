@@ -634,17 +634,9 @@ export class Sim {
         side: i ? 1 : -1, yaw: i ? Math.PI : 0,
         clear: sc.gap, clearBody: sc.zone === 'length',
       }));
-      // the plane zone: placed against it as built; when relaxing, a body
-      // length further back so its sprawl can't reach the prize, and moved
-      // up against it again once relaxed (relaxStep)
-      if (sc.zone === 'plane') {
-        this.placeInZone();
-        if (this.relaxing) this.creatures.forEach((c, i) => {
-          if (!c.valid) return;
-          const s = i ? 1 : -1, L = Math.max(...[[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(w => -c.minAlong(w.map(x => -x)) - c.minAlong(w)));
-          c.shift([s * L, 0, 0]);
-        });
-      }
+      // the plane zone: placed against it as built, and kept against it
+      // every step while relaxing (relaxStep)
+      if (sc.zone === 'plane') this.placeInZone();
     } else {
       this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land }));
     }
@@ -682,6 +674,10 @@ export class Sim {
   // RELAX_STILL; then friction comes on, contestants move up to their zone,
   // and measuring starts
   relaxStep() {
+    // on frictionless ground a horizontal shift doesn't change how a body
+    // settles, so contestants glide along the plane as they topple rather
+    // than jump to it at the end
+    if (this.cube && this.scene.zone === 'plane') this.placeInZone();
     let still = this.t >= RELAX_MIN;
     this.creatures.forEach((c, i) => {
       if (!c.valid || this.failed[i]) return;
@@ -693,7 +689,6 @@ export class Sim {
     const f = this.scene.friction;
     this.groundCol.setFriction(f);
     this.creatures.forEach(c => { if (c.valid) c.setFriction(f); });
-    if (this.cube && this.scene.zone === 'plane') this.placeInZone();
     this.tStart = this.t;
     this.totalSteps = this.steps + Math.round(this.T / DT);
   }

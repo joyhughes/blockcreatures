@@ -34,9 +34,10 @@ use five defences, all of which are used here:
    further back." With a 45° plane, a point at height h starts at least h
    further back, which is as far as toppling carries it. A long, low crawler
    isn't pushed back at all.
-5. **Relax before placing**: contestants relax (rule 1) far out, then each is
-   moved straight toward the ball until it touches its plane, in its
-   slumped posture.
+5. **Relax before placing**: contestants relax (rule 1) against their plane
+   and are kept touching it as they slump: on frictionless ground sliding
+   doesn't change how a body settles, so each glides back along the ground
+   as it topples and starts against the plane in its slumped posture.
 
 Competition also has Sims' **control bonus**: "further decreasing the
 distance value ... when a creature is touching the cube on the side that
@@ -282,7 +283,7 @@ radial jumper's 0.71 J/kg (most of it on landing; at most 4 cm of its height).
 | Jumping | free | 150 | lowest part 1.24 m up: two 1 m blocks on a hinge that fling themselves clear of the ground |
 | Following (water) | free | 300 | 0.12–0.39 m/s closing, from all 8 test directions |
 | Following (land) | free | 150 | 0.17–0.45 m/s closing from 7 of 8 directions (−0.08 from the eighth); chosen as the most robust of the last 20 generation bests, none of which may trip the energy audit in any of 24 runs |
-| Competition | free, ball scene | 150 | 1.51 average in a round robin of every 10th generation's best; shown beating the next strongest 1.78 to 0.22 |
+| Competition | free, ball scene | 150 | 1.40 average in a round robin of every 10th generation's best (gen 59 edges it at 1.48 but only ties its bout); shown beating the next strongest 1.50 to 0.50 |
 | Swimming | radial ×5, round | 150 | 0.74 m/s |
 | Swimming | bilateral, round | 150 | 0.63 m/s |
 | Swimming | radial ×6, from the tentacle example | 150 | 0.67 m/s |
