@@ -179,10 +179,11 @@
     <label title="The start zone plane's angle above the ground. 45°: a point at height h starts h further back. 90°: height doesn't matter">Slope <input type="number" id="scSlope" min="10" max="90" step="5">°</label>
   </div>
   <div class="row" data-kind="compete cooperate" style="margin-top:8px">
-    <label title="Contestants bigger than this are scaled down to it">Size cap <input type="number" id="scMaxVolume" min="0.1" max="3" step="0.1"> m³</label>
+    <label title="Contestants bigger than this are scaled down to it; with Same size, smaller ones are scaled up to it too">Volume <input type="number" id="scMaxVolume" min="0.1" max="3" step="0.1"> m³</label>
+    <label title="Every contestant is scaled to exactly this volume, up or down, so no one wins by being small or big. Off: the volume is only a cap"><input type="checkbox" id="scSameSize"> Same size</label>
     <label title="With Sims' settling: each creature relaxes on its own, far from the ball and the other creature and with its brain idle, then moves into its start zone. Off: it relaxes against its start zone beside them, already sensing"><input type="checkbox" id="scApart"> Settle apart</label>
     <label data-kind="compete" title="Sims' control bonus: touching the prize on the side away from your own centre of mass (wrapping around it) takes up to its radius off your distance"><input type="checkbox" id="scGrip"> Wrap bonus</label>
-    <label data-kind="compete" title="How the final distance to the prize is measured. Centre of mass (Sims): from each contestant's centre of mass to the prize's centre, so getting your whole body to it wins, not just touching it. Nearest part: from the contestant's closest surface, so any touch counts as distance 0">Distance from <select id="scMetric"><option value="com">centre of mass</option><option value="surface">nearest part</option></select></label>
+    <label data-kind="compete" title="How the final distance to the prize is measured. Centre of mass (Sims): from each contestant's centre of mass to the prize's centre, so getting your whole body to it wins, not just touching it. Nearest part: from the contestant's closest surface, so any touch counts as distance 0">Distance from <select id="scMetric"><option value="surface">nearest part</option><option value="com">centre of mass</option></select></label>
   </div>
   <div class="row" style="margin-top:8px"><button id="scReset" title="Restore the default scene">Default scene</button></div>
   <p class="note" id="sceneNote"></p>

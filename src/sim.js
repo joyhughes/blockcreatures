@@ -40,8 +40,10 @@ export const TASKS = {
   jump: { label: 'Jumping', env: 'land', duration: 6, settle: 1.5, trials: 1, kind: 'jump' },
   followWater: { label: 'Following (water)', env: 'water', duration: 8, settle: 0, trials: 3, kind: 'follow' },
   followLand: { label: 'Following (land)', env: 'land', duration: 8, settle: 1, trials: 3, kind: 'follow' },
+  // scene duration 20 s: a 10 s game rarely gave them time to reach the ball
+  // (runs whose scene says null keep the task's 10 s)
   compete: { label: 'Competition', env: 'land', duration: 10, settle: 0.5, trials: 1, kind: 'compete', pair: true,
-    scene: { ballSize: 0.25, ballMass: 0.15 } },
+    scene: { ballSize: 0.25, ballMass: 0.15, duration: 20 } },
   // both start behind a heavy ball and share one score for getting it into
   // the goal: progress toward it, or 1 + the share of time left on scoring
   cooperate: { label: 'Cooperation', env: 'land', duration: 15, settle: 0.5, trials: 1, kind: 'cooperate', pair: true,
@@ -61,6 +63,7 @@ export const TASKS = {
 //              contestant's longest dimension is added to `gap`; 'none' = near side at `gap`
 //   slope      the plane's angle above the ground (45 = a point at height h starts h further back)
 //   maxVolume  contestants are scaled down to at most this volume (m^3)
+//   sameSize   ... and scaled up to it too: every contestant has exactly maxVolume
 //   grip       Sims' control bonus: touching the ball on the far side from your own centre of mass
 //              (wrapping around it) shortens your distance by up to the ball's radius
 //   metric     competition's distance to the ball: 'com' (Sims) = from the centre of mass to the
@@ -76,17 +79,17 @@ export const TASKS = {
 //              both creatures touch the ball at once
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
-  ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 0.6, grip: true,
-  settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'com', apart: true, together: 0.2,
+  ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
+  settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0 };
+export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false };
 // a task's default scene: SCENE with the task's own ball
 export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0 };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false };
   const legacy = TASKS[taskName].kind === 'cooperate' ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -184,7 +187,7 @@ export class Creature {
     if (!this.valid) return;
     if (opts.maxVolume) {
       const vol = parts.reduce((s, p) => s + massProps(p).m, 0);
-      if (vol > opts.maxVolume) {
+      if (vol > opts.maxVolume || opts.sameSize) {
         const k = Math.cbrt(opts.maxVolume / vol);
         for (const p of parts) {
           p.half = p.half.map(x => x * k); p.center = scale(p.center, k); p.anchor = scale(p.anchor, k);
@@ -651,7 +654,7 @@ export class Sim {
         .setDensity(sc.ballMass / vol).setFriction(sc.friction), body);
       this.cube = body;
       this.creatures = genomes.map((g, i) => new Creature(world, g, { ...copts,
-        ground: true, maxVolume: sc.maxVolume,
+        ground: true, maxVolume: sc.maxVolume, sameSize: sc.sameSize,
         side: i && !coop ? 1 : -1, yaw: i && !coop ? Math.PI : 0,
         clear: sc.gap, clearBody: sc.zone === 'length',
       }));

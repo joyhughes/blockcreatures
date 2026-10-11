@@ -11,7 +11,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Walking | land: gravity, ground friction | same, horizontal, measured after the body has relaxed (see below) so falling over doesn't count |
 | Jumping | land | maximum height reached by the *lowest* part of the creature |
 | Following (water / land) | either | closing speed toward a light source, averaged over 3 trials with the light in different directions; per-block photosensors |
-| Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances of the two centres of mass to the ball's centre, less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"), of its own population or, with **Teams**, of a rival species; sizes capped at equal volume |
+| Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball (nearest part), less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"), of its own population or, with **Teams**, of a rival species; sizes capped at equal volume |
 | Cooperation (beyond Sims) | land, two creatures side by side behind a heavy ball, a goal ahead | one shared score: 0.8 × the share of the way the ball got to the goal + 0.2 × the share of their distance to the ball the two closed; a goal ends the game and scores 1 + the share of time left (so 1–2) |
 
 ### Falling over: Sims' rules
@@ -256,14 +256,16 @@ The **Scene** panel sets the world a run is scored in:
   creatures can push and dribble it. **Start distance** is where the start
   zone meets the ground. **Start zone**: *Sims' slope* (default; rules 4–5),
   with its **Slope** angle (90° = height doesn't count); *+ body length* (the
-  contestant's longest dimension is added); or *none*. **Size cap** scales
-  bigger contestants down to that volume. **Wrap bonus** turns Sims' control
-  bonus on or off. **Distance from**: *centre of mass* (default, Sims) scores
-  each contestant by its centre of mass's final distance to the prize's
-  centre, so a creature has to bring its body to the prize and keep it there;
-  *nearest part* measures from its closest surface, where any touch counts as
-  0 and a long reach ties with real control. Runs and champions from before
-  this setting keep *nearest part*.
+  contestant's longest dimension is added); or *none*. **Volume** (default 1 m³)
+  with **Same size** (default) scales every contestant to exactly that
+  volume, up or down, so neither a small nor a big body wins by its size;
+  without Same size it only scales bigger ones down (runs from before the
+  setting). **Wrap bonus** turns Sims' control bonus on or off. **Distance
+  from**: *nearest part* (default) measures from each contestant's closest
+  surface to the prize; *centre of mass* measures from its centre of mass to
+  the prize's centre. Centre of mass was tried as the default and bred small,
+  slow creatures, since a small body gets its centre closest. Competition's
+  lifespan is 20 s (runs from before keep 10 s).
 
 The scene belongs to the run: it is saved with it, recorded in each
 generation's history, and used when that generation is replayed. Changing it

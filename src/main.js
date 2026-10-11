@@ -52,7 +52,7 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
-  grip: 'scGrip', metric: 'scMetric', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether' };
+  grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether' };
 function readScene() {
   const s = {};
   for (const [k, id] of Object.entries(SC_FIELDS)) {

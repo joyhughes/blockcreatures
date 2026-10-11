@@ -16,7 +16,7 @@ import { cpus } from 'node:os';
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { Pool } from '../src/pool.js';
 import { Evolver } from '../src/evolve.js';
-import { SCENE } from '../src/sim.js';
+import { defaultScene } from '../src/sim.js';
 
 const [task = 'swim', gens = '30', pop = '300', seed = '1', planArg = 'free', roundArg = ''] = process.argv.slice(2);
 const m = /^radial(\d+)$/.exec(planArg);
@@ -31,7 +31,8 @@ const pool = new Pool(onMsg => {
   return job => w.postMessage(job);
 }, n);
 // SCENE='{"gap":3,"duration":15}' overrides scene parameters (sim.js SCENE); LEGACY=1 uses the old cube scene
-const scene = process.env.LEGACY ? null : { ...SCENE, ...JSON.parse(process.env.SCENE || '{}') };
+// the target's default scene, as the app starts a run (its own ball and lifespan)
+const scene = process.env.LEGACY ? null : { ...defaultScene(task), ...JSON.parse(process.env.SCENE || '{}') };
 const ev = new Evolver({ task, popSize: +pop, seed: +seed, evaluate: jobs => pool.run(jobs), body, islands, novelty, structural, migrate, scene, teams });
 // SEED_FROM=<file with a .genome> starts from mutants of that creature
 if (process.env.SEED_FROM) ev.seedFrom(JSON.parse(readFileSync(process.env.SEED_FROM)).genome);
