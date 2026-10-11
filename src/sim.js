@@ -69,7 +69,7 @@ export const TASKS = {
 //   goalSize   cooperation: the goal's radius; the ball is in when its centre is inside
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
-  ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 2.5, zone: 'plane', slope: 45, maxVolume: 0.6, grip: true,
+  ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 0.6, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away

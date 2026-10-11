@@ -119,9 +119,10 @@ const setBodyEnabled = on => { for (const el of [...$('plan').children, $('radia
 
 // Each target and body plan (arm count and round-parts setting included) has
 // its own run: evolution stays within the plan, and switching plans keeps the
-// other plans' runs to come back to.
+// other plans' runs to come back to. So does Teams in competition and
+// cooperation: one gene pool and two co-evolving teams are separate runs.
 const runs = new Map();
-const runKey = () => task + planTag();
+const runKey = () => task + planTag() + (TASKS[task].pair && $('teams').value === '2' ? '-teams' : '');
 function newRun() {
   running = false;
   $('go').textContent = 'Evolve';
@@ -187,7 +188,13 @@ $('go').onclick = () => {
   if (running) loopDone = evolveLoop();
 };
 $('reset').onclick = () => { if (running) $('go').click(); newRun(); loadChampion(); };
-$('pop').onchange = $('seed').onchange = $('islands').onchange = $('teams').onchange = () => { if (!running && evolver.gen === 0) newRun(); };
+$('pop').onchange = $('seed').onchange = $('islands').onchange = () => { if (!running && evolver.gen === 0) newRun(); };
+// the other Teams setting's run, or a new one in the current scene
+$('teams').onchange = () => {
+  if (running) return;
+  if (runs.has(runKey())) return switchRun();
+  newRun(); loadChampion();
+};
 // these can change during a run; they apply from the next generation
 for (const id of ['novelty', 'structural', 'migrate']) $(id).onchange = () => { evolver[id] = +$(id).value; };
 

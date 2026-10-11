@@ -223,8 +223,10 @@ team B's best the same way. The generation list and the best readout give
 both teams' scores (`1.12 · B 1.05`), and the chart adds team B's best and
 mean in lilac. Scores are shares of a bout (they sum to 2), so a team doing
 better than 1 is beating the other's previous best. Mate island bests mates
-each team's islands among themselves. Teams is set when a run starts; Save
-and Load keep both teams.
+each team's islands among themselves. One population and two teams are
+separate runs, like body plans: switching Teams (while paused) keeps the other
+setting's run to come back to, and a new one starts in the current scene.
+Save and Load keep both teams.
 
 ## Scene
 
