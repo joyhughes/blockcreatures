@@ -241,7 +241,7 @@ champions. Scores below are under the current fitness measures (see
 | Jumping | free | 150 | lowest part 0.64 m up |
 | Following (water) | free | 300 | 0.12–0.39 m/s closing, from all 8 test directions |
 | Following (land) | free | 300 | 0.02–0.18 m/s closing from all 8 directions (re-evolved after the fall fix; straight-line motion would average ≈ 0) |
-| Competition | free | 150 | 1.12 against the previous generation's best |
+| Competition | free, 6 islands, ball scene | 150 | 1.49 average against the bests of every 10th generation (0.90 in a close race with the previous best); both contestants walk from 2.7 m to within 0.7 m of the ball in 10 s |
 | Swimming | radial ×5, round | 150 | 0.74 m/s |
 | Swimming | bilateral, round | 150 | 0.63 m/s |
 | Swimming | radial ×6, from the tentacle example | 150 | 0.67 m/s |
