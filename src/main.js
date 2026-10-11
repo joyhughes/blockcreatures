@@ -115,7 +115,7 @@ function showPlan() {
 }
 for (const b of $('plan').children) b.onclick = () => { if (running) return; planType = b.dataset.plan; showPlan(); switchRun(); };
 $('radialN').onchange = $('round').onchange = $('minArm').onchange = () => { if (running) return; showPlan(); switchRun(); };
-const setBodyEnabled = on => { for (const el of [...$('plan').children, $('radialN'), $('round'), $('minArm'), $('islands')]) el.disabled = !on; };
+const setBodyEnabled = on => { for (const el of [...$('plan').children, $('radialN'), $('round'), $('minArm'), $('islands'), $('teams')]) el.disabled = !on; };
 
 // Each target and body plan (arm count and round-parts setting included) has
 // its own run: evolution stays within the plan, and switching plans keeps the
@@ -129,7 +129,7 @@ function newRun() {
     task, popSize: +$('pop').value, seed: +$('seed').value,
     evaluate: jobs => pool.run(jobs), body: body(), islands: +$('islands').value,
     novelty: +$('novelty').value, structural: +$('structural').value, migrate: +$('migrate').value,
-    scene: readScene(),
+    scene: readScene(), teams: +$('teams').value,
   });
   runs.set(runKey(), evolver);
   showScene();
@@ -143,6 +143,7 @@ function switchRun() {
   evolver = r;
   $('pop').value = r.popSize;
   $('islands').value = String(r.islands);
+  $('teams').value = String(r.teams);
   $('novelty').value = String(r.novelty); $('structural').value = String(r.structural); $('migrate').value = String(r.migrate);
   writeScene(r.scene);
   selected = -1; pendingGen = -1;
@@ -162,7 +163,7 @@ async function evolveLoop() {
     const before = evolver.pop.filter(p => p.fit === null).length;
     const varying = ['follow', 'compete'].includes(TASKS[task].kind);
     const h = await evolver.step();
-    evalCount += varying ? evolver.popSize * TASKS[task].trials : before;
+    evalCount += (varying ? evolver.popSize * TASKS[task].trials : before) * evolver.teams;
     const secs = (performance.now() - evalT0) / 1000;
     $('sRate').textContent = (evalCount / secs).toFixed(0);
     // watching latest: switch once the current replay has played out
@@ -183,7 +184,7 @@ $('go').onclick = () => {
   if (running) loopDone = evolveLoop();
 };
 $('reset').onclick = () => { if (running) $('go').click(); newRun(); loadChampion(); };
-$('pop').onchange = $('seed').onchange = $('islands').onchange = () => { if (!running && evolver.gen === 0) newRun(); };
+$('pop').onchange = $('seed').onchange = $('islands').onchange = $('teams').onchange = () => { if (!running && evolver.gen === 0) newRun(); };
 // these can change during a run; they apply from the next generation
 for (const id of ['novelty', 'structural', 'migrate']) $(id).onchange = () => { evolver[id] = +$(id).value; };
 
@@ -267,19 +268,26 @@ function showGen(gen, user = true) {
   const ti = topIsland(h);
   const r = { genome: h.genome, opponent: h.opponent, phase: h.phase, scene: h.scene, gen, show: mode, fitness: h.best,
     label: (mode === 'ever' ? `best so far: generation ${gen}` : `generation ${gen} best`) + (ti >= 0 ? ` (island ${ti + 1})` : '') };
+  // two teams: the creature shown is team A's, facing team B's previous best
+  if (h.rivalGenome) {
+    r.label = r.label.replace(/best/, 'team A best') + `, against team B's best of generation ${gen - 1}`;
+    if (gen === 0) r.label = r.label.replace(/team B's best of generation -1/, 'a random team B creature');
+  }
+  if (mode === 'rival' && h.rivalGenome) Object.assign(r, { genome: h.rivalGenome, opponent: h.rivalOpponent, fitness: h.rivalBest,
+    label: `generation ${gen} team B best, against ` + (gen ? `team A's best of generation ${gen - 1}` : 'a random team A creature') });
   const lp = evolver.lastPop;
   if ((mode === 'top' || mode === 'all') && lp && lp.gen === gen) {
     const m = mode === 'top' ? lp.members.slice(0, 25) : lp.members;
     r.cells = m.map((p, i) => ({ genome: p.g, opponent: lp.opponent, label: `#${i + 1}${evolver.islands > 1 ? ' · island ' + (p.isl + 1) : ''} · ${p.fit.toFixed(3)}`, short: p.fit.toFixed(3), color: COLORS[(p.isl || 0) % COLORS.length] }));
     r.phase = lp.phase; r.scene = lp.scene;
     r.label = mode === 'top' ? `generation ${gen}, top ${m.length}` : `generation ${gen}, all ${m.length} creatures`;
-  } else if (mode !== 'best' && mode !== 'ever' && h.islandGenomes) {
+  } else if (mode !== 'best' && mode !== 'ever' && mode !== 'rival' && h.islandGenomes) {
     r.cells = h.islandGenomes.map((g, k) => ({ genome: g, opponent: h.opponent, label: `island ${k + 1} · ${h.islands[k].toFixed(3)}`, color: COLORS[k % COLORS.length] }));
     r.label = `generation ${gen}, best of each island` + (mode !== 'islands' ? ' (the whole population is kept only for the latest generation)' : '');
   }
   if (r.cells) r.fitness = undefined;
   startReplay(r);
-  drawGraph(h.genome);
+  drawGraph(r.genome);
   markGens();
   drawIslands();
 }
@@ -389,13 +397,15 @@ async function loadChampion() {
 function refresh() {
   const H = evolver.history;
   $('sGen').textContent = H.length ? H.length - 1 : '–';
-  $('sBest').textContent = H.length ? Math.max(...H.map(h => h.best)).toFixed(3) : '–';
+  $('sBest').innerHTML = H.length ? Math.max(...H.map(h => h.best)).toFixed(3) + (evolver.rival ? `<small class="teamB">team B ${Math.max(...H.map(h => h.rivalBest ?? -Infinity)).toFixed(3)}</small>` : '') : '–';
+  $('showRival').hidden = !evolver.rival;
+  if (!evolver.rival && $('show').value === 'rival') $('show').value = 'best';
   if (!running) $('sRate').textContent = '–';
   const box = $('gens');
   while (box.children.length < H.length) {
     const i = box.children.length;
     const d = document.createElement('div');
-    d.innerHTML = `<span>gen ${i}</span><span>${H[i].best.toFixed(3)}</span>`;
+    d.innerHTML = `<span>gen ${i}</span><span>${H[i].best.toFixed(3)}${H[i].rivalBest !== undefined ? ' · B ' + H[i].rivalBest.toFixed(3) : ''}</span>`;
     d.onclick = () => showGen(i);
     box.prepend(d);
   }
@@ -454,7 +464,8 @@ function drawChart() {
   const H = evolver.history;
   if (H.length < 1) return;
   const pad = 8 * devicePixelRatio;
-  let lo = Math.min(0, ...H.map(x => x.mean)), hi = Math.max(...H.map(x => x.best)) || 1;
+  const teams = H[0].rivalBest !== undefined;
+  let lo = Math.min(0, ...H.map(x => x.mean), ...(teams ? H.map(x => x.rivalMean ?? 0) : [])), hi = Math.max(...H.map(x => x.best), ...(teams ? H.map(x => x.rivalBest ?? 0) : [])) || 1;
   if (hi - lo < 1e-6) hi = lo + 1;
   const X = i => pad + (w - 2 * pad) * (H.length === 1 ? 0.5 : i / (H.length - 1));
   const Y = v => h - pad - (h - 2 * pad) * (v - lo) / (hi - lo);
@@ -470,7 +481,8 @@ function drawChart() {
       g.stroke();
     });
   }
-  for (const [key, col] of [['mean', '#4fa3d9'], ['best', '#e8b04a']]) {
+  // two teams: team B's best and mean in lilac, team A's as usual
+  for (const [key, col] of [...(teams ? [['rivalMean', '#9b8ac4'], ['rivalBest', '#c9b6f2']] : []), ['mean', '#4fa3d9'], ['best', '#e8b04a']]) {
     g.strokeStyle = col; g.lineWidth = 2 * devicePixelRatio;
     g.beginPath();
     H.forEach((x, i) => (i ? g.lineTo(X(i), Y(x[key])) : g.moveTo(X(i), Y(x[key]))));
@@ -586,7 +598,9 @@ $('save').onclick = () => {
     task, seed: evolver.rng && +$('seed').value, popSize: evolver.popSize, gen: evolver.gen,
     history: evolver.history, pop: evolver.pop.map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder })), opponent: evolver.opponent,
     body: evolver.body, islands: evolver.islands, novelty: evolver.novelty, structural: evolver.structural, migrate: evolver.migrate,
-    scene: evolver.scene,
+    scene: evolver.scene, teams: evolver.teams, champ: evolver.champ,
+    rival: evolver.rival && { history: evolver.rival.history, gen: evolver.rival.gen, champ: evolver.rival.champ, opponent: evolver.rival.opponent,
+      pop: evolver.rival.pop.map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder })) },
   }));
 };
 
@@ -607,6 +621,7 @@ $('load').onchange = async e => {
   $('round').checked = !!b.round;
   $('minArm').value = String(b.minArm || 0);
   $('islands').value = String(d.islands || 1);
+  $('teams').value = String(d.teams || 1);
   $('novelty').value = String(d.novelty ?? 0); $('structural').value = String(d.structural ?? 0); $('migrate').value = String(d.migrate ?? 10);
   showPlan();
   newRun();
@@ -617,6 +632,13 @@ $('load').onchange = async e => {
   evolver.gen = d.gen ?? evolver.history.length;
   evolver.opponent = d.opponent || null;
   evolver.pop = (d.pop || []).map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder, id: evolver.nextId++ }));
+  evolver.champ = d.champ || null;
+  const rv = evolver.rival;
+  if (rv && d.rival) {
+    rv.rng = makeRng((d.seed || 1) * 7919 + (d.gen || 0) + 101);
+    Object.assign(rv, { history: d.rival.history || [], gen: d.rival.gen ?? evolver.gen, champ: d.rival.champ || null, opponent: d.rival.opponent || null });
+    rv.pop = (d.rival.pop || []).map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder, id: rv.nextId++ }));
+  }
   $('gens').innerHTML = '';
   refresh();
   if (evolver.history.length) showGen(evolver.history.length - 1);

@@ -39,7 +39,11 @@ export class Evolver {
   // novelty: 0..1 weight of novelty rank in selection; structural: share of
   // mutants given a structural change; migrate: 0 = never. All 0 with
   // islands 1 is Sims' scheme, and reproduces earlier runs exactly.
-  constructor({ task, popSize = 300, survival = 0.2, seed = 1, evaluate, body = {}, islands = 1, migrate = 10, novelty = 0, structural = 0, scene = null }) {
+  // teams (competition): 1 = one population playing its own previous best;
+  // 2 = two species that never interbreed, each scored against the other's
+  // best of the previous generation (Sims' interspecies competition). Team B
+  // is a second Evolver in `rival`; this one is team A.
+  constructor({ task, popSize = 300, survival = 0.2, seed = 1, evaluate, body = {}, islands = 1, migrate = 10, novelty = 0, structural = 0, scene = null, teams = 1 }) {
     this.body = body;
     this.scene = scene;   // sim scene parameters (sim.js SCENE); null = the legacy scene
     this.islands = Math.max(1, Math.min(islands, Math.floor(popSize / 10)));
@@ -57,6 +61,10 @@ export class Evolver {
     this.history = [];      // per generation: {gen, best, mean, median, bestGenome}
     this.nextId = 1;
     this.opponent = null;   // competition: best of the previous generation
+    this.champ = null;      // this population's best of the latest generation
+    this.teams = teams === 2 && TASKS[task].pair ? 2 : 1;
+    this.rival = this.teams === 2 ? new Evolver({ task, popSize, survival, seed: seed * 7919 + 101, evaluate, body, islands, migrate, novelty, structural, scene }) : null;
+    if (this.rival) this.rival.team = 1;
   }
 
   // A run evolves within one body plan: every genome must carry the run's plan
@@ -101,6 +109,7 @@ export class Evolver {
     while (this.pop.length < this.popSize) this.pop.push({ g: this.randomViable(), fit: null, id: this.nextId++ });
     for (const p of this.pop) p.founder = p.id;   // generation-0 ancestor, for diversity statistics
     this.assignIslands();
+    this.rival?.seed();
   }
 
   // Population of the given genome plus mutants of it.
@@ -114,10 +123,26 @@ export class Evolver {
     }
     for (const p of this.pop) p.founder = p.id;
     this.assignIslands();
+    this.rival?.seedFrom(g);
   }
 
-  // Run one generation: evaluate, record, select, reproduce.
+  // Run one generation: evaluate, record, select, reproduce. With two teams,
+  // both run a generation, each against the other's previous best; the
+  // history entry is team A's, with team B's results as rival*.
   async step() {
+    const r = this.rival;
+    if (!r) return this.stepOne();
+    for (const k of ['scene', 'novelty', 'structural', 'migrate']) r[k] = this[k];
+    if (this.rescore) r.rescore = true;
+    if (!r.pop.length) r.seed();
+    const a = this.champ || this.pop[this.rng.int(this.pop.length)].g;
+    const b = r.champ || r.pop[r.rng.int(r.pop.length)].g;
+    this.opponent = clone(b); r.opponent = clone(a);
+    const [ha, hb] = await Promise.all([this.stepOne(), r.stepOne()]);
+    return Object.assign(ha, { rivalBest: hb.best, rivalMean: hb.mean, rivalGenome: hb.genome, rivalOpponent: hb.opponent });
+  }
+
+  async stepOne() {
     const task = TASKS[this.task];
     const rng = this.rng;
     // the scene changed (main.js): scores from the old one don't carry over
@@ -149,7 +174,8 @@ export class Evolver {
       diversity: div.within, islandSpread: div.between,
       opponent: task.pair ? clone(this.opponent) : null,
     });
-    if (task.pair) this.opponent = clone(best.g);
+    this.champ = clone(best.g);
+    if (task.pair && !this.rival && !this.team) this.opponent = clone(best.g);
 
     // selection and reproduction, separately on each island
     const sizes = this.islandSizes();
@@ -213,6 +239,7 @@ export class Evolver {
       task: this.task, genomes: task.pair ? [k.g, last?.opponent || this.opponent] : [k.g], opts: { phase, scene: this.scene },
     })));
     kids.forEach((k, i) => { k.fit = res[i][0]; });
+    if (this.rival) await this.rival.mateIslands();
     kids.sort((x, y) => y.fit - x.fit);
     const varying = task.kind === 'follow' || task.kind === 'compete';
     const placed = new Set();

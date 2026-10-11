@@ -46,6 +46,7 @@
   .row label { color: var(--muted); display: flex; gap: 6px; align-items: center; }
   input[type=number] { width: 72px; }
   [hidden] { display: none !important; }
+  .teamB { display: block; font-size: 11px; font-weight: 400; color: #c9b6f2; }
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
   .stat { background: #20252d; border-radius: 6px; padding: 6px 8px; }
   .stat b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
@@ -82,6 +83,7 @@
     <select id="show" title="Which creatures to show">
       <option value="best" selected>Best</option>
       <option value="ever" title="The highest-scoring generation best of the whole run">Best so far</option>
+      <option value="rival" id="showRival" hidden title="Two teams: team B's best, against team A's best of the previous generation">Team B best</option>
       <option value="islands">Island bests</option>
       <option value="top">Top 25</option>
       <option value="all">Whole population</option>
@@ -117,6 +119,7 @@
     <label>Population <input type="number" id="pop" value="300" min="20" max="2000" step="10"></label>
     <label>Seed <input type="number" id="seed" value="1" min="1"></label>
     <label title="Sub-populations that select and mate separately; each island's best migrates to the next every 10 generations. 1 = Sims' single population">Islands <select id="islands"><option>1</option><option>2</option><option>4</option><option selected>6</option><option>8</option><option>12</option></select></label>
+    <label data-kind="compete" title="One population: every creature is scored against the population's own best of the previous generation. Two teams: two species that never interbreed, each scored against the other team's best of the previous generation (Sims' interspecies competition), so they keep adapting to each other. The orange creature is the one being shown; team B's best is under Show">Teams <select id="teams"><option value="1">one population</option><option value="2">two teams</option></select></label>
   </div>
   <div class="row" style="margin-top:8px">
     <label title="How much selection rewards bodies unlike the rest of the population (all islands) and past novel bodies. Each island's two fittest always survive. 0 = fitness only">Novelty <select id="novelty"><option value="0">0</option><option value="0.15">0.15</option><option value="0.3" selected>0.3</option><option value="0.5">0.5</option><option value="0.7">0.7</option></select></label>

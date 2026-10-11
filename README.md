@@ -11,7 +11,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Walking | land: gravity, ground friction | same, horizontal, measured after the body has relaxed (see below) so falling over doesn't count |
 | Jumping | land | maximum height reached by the *lowest* part of the creature |
 | Following (water / land) | either | closing speed toward a light source, averaged over 3 trials with the light in different directions; per-block photosensors |
-| Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball, less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"); sizes capped at equal volume |
+| Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball, less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"), of its own population or, with **Teams**, of a rival species; sizes capped at equal volume |
 
 ### Falling over: Sims' rules
 
@@ -183,6 +183,26 @@ headless runs; 0, 0 and Islands 1 reproduce Sims' scheme.
   the top 25 labelled like `2×5 cross · 0.84`. The best two per island replace
   that island's newest children, and selection decides whether they last.
 
+## Two teams
+
+In competition, **Teams** (Evolution panel) chooses who a creature plays.
+*One population* (default) is the self-play used so far: everyone plays the
+population's own best of the previous generation. *Two teams* is Sims'
+interspecies competition: two species that never interbreed or migrate, each
+scored against the other team's best of the previous generation, so each
+keeps adapting to whatever the other is doing. Both teams have the run's
+population size, islands and settings, and evolve side by side (a generation
+takes twice as long).
+
+The run's history, generation list and Show *Best* follow team A, shown as
+the orange creature against team B's previous best; Show *Team B best* shows
+team B's best the same way. The generation list and the best readout give
+both teams' scores (`1.12 · B 1.05`), and the chart adds team B's best and
+mean in lilac. Scores are shares of a bout (they sum to 2), so a team doing
+better than 1 is beating the other's previous best. Mate island bests mates
+each team's islands among themselves. Teams is set when a run starts; Save
+and Load keep both teams.
+
 ## Scene
 
 The **Scene** panel sets the world a run is scored in:
@@ -258,7 +278,8 @@ node tools/cdp.mjs <url> out.png [waitMs] [js]                 # headless Chrome
 Tasks: `swim walk jump followWater followLand compete`. Env: `ISLANDS=K`
 (default 6; 1 = single population), `MIN_ARM=k`, `SEED_FROM=file`,
 `SCENE='{"gap":4,"duration":15}'` (scene overrides, see `SCENE` in `src/sim.js`),
-`LEGACY=1` (the old cube scene); e.g.
+`LEGACY=1` (the old cube scene), `TEAMS=2` (competition between two
+species; team B's history is saved as `rivalHistory`); e.g.
 `MIN_ARM=4 node tools/evolve.mjs swim 150 300 1 radial8 round`. Body plans for the
 headless runner: `node tools/evolve.mjs walk 150 300 1 bilateral round` (plan
 `free | bilateral | radialN`, then `round` to allow capsules and spheres;
