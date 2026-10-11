@@ -12,6 +12,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Jumping | land | maximum height reached by the *lowest* part of the creature |
 | Following (water / land) | either | closing speed toward a light source, averaged over 3 trials with the light in different directions; per-block photosensors |
 | Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball, less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"), of its own population or, with **Teams**, of a rival species; sizes capped at equal volume |
+| Cooperation (beyond Sims) | land, two creatures side by side behind a heavy ball, a goal ahead | one shared score: 0.8 × the share of the way the ball got to the goal + 0.2 × the share of their distance to the ball the two closed; a goal ends the game and scores 1 + the share of time left (so 1–2) |
 
 ### Falling over: Sims' rules
 
@@ -183,9 +184,31 @@ headless runs; 0, 0 and Islands 1 reproduce Sims' scheme.
   the top 25 labelled like `2×5 cross · 0.84`. The best two per island replace
   that island's newest children, and selection decides whether they last.
 
+## Cooperation
+
+A game for two that isn't in Sims' paper. Both creatures start side by side
+behind a ball (0.35 m radius, 0.6 kg, about as heavy as the biggest
+creature), 0.5 m apart, and a goal circle lies ahead (**Goal distance** 3 m,
+**Goal size** 0.6 m radius). They share one score, so neither gains by
+getting in the other's way. Getting the ball into the goal ends the game and
+scores 1 + the share of the time left, so a fast goal is worth nearly 2.
+Short of a goal, 0.8 of the score is how far the ball got toward the goal's
+edge and 0.2 is how much of the distance to the ball the two closed. Without
+that last part, random creatures that never touch the ball all score 0 and
+evolution has nothing to climb.
+
+They sense the ball with the photosensor that follows the light or the
+prize. In cooperation the second photosensor, which otherwise points at the
+opponent, points at the goal, so each creature knows where to push. The start
+zone and relaxing rules are the competition's. Lifespan is 15 s. Pairing works
+as in competition: with one population, each creature plays with the
+population's previous best; with **Two teams**, two species each play with the
+other's previous best. Show *Team B best* shows team B's side.
+
 ## Two teams
 
-In competition, **Teams** (Evolution panel) chooses who a creature plays.
+In competition and cooperation, **Teams** (Evolution panel) chooses who a
+creature plays against or with.
 *One population* (default) is the self-play used so far: everyone plays the
 population's own best of the previous generation. *Two teams* is Sims'
 interspecies competition: two species that never interbreed or migrate, each
@@ -275,7 +298,7 @@ node tools/regress.mjs                                         # bundled champio
 node tools/cdp.mjs <url> out.png [waitMs] [js]                 # headless Chrome screenshot
 ```
 
-Tasks: `swim walk jump followWater followLand compete`. Env: `ISLANDS=K`
+Tasks: `swim walk jump followWater followLand compete cooperate`. Env: `ISLANDS=K`
 (default 6; 1 = single population), `MIN_ARM=k`, `SEED_FROM=file`,
 `SCENE='{"gap":4,"duration":15}'` (scene overrides, see `SCENE` in `src/sim.js`),
 `LEGACY=1` (the old cube scene), `TEAMS=2` (competition between two

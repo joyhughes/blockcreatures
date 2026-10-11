@@ -25,7 +25,10 @@ export class Recorder {
     this.chunks = [];
     this.mr = new MediaRecorder(this.cv.captureStream(60), { mimeType: this.mime, videoBitsPerSecond: 16e6 });
     this.mr.ondataavailable = e => { if (e.data.size) this.chunks.push(e.data); };
-    this.mr.start(1000);
+    // one piece at the end, not timesliced: with a timeslice Chrome writes a
+    // fragmented MP4 whose header some players (QuickTime) read as only the
+    // first second or two
+    this.mr.start();
     this.t0 = performance.now();
   }
 

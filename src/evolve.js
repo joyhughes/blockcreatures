@@ -60,7 +60,7 @@ export class Evolver {
     this.pop = [];          // {g, fit, id}
     this.history = [];      // per generation: {gen, best, mean, median, bestGenome}
     this.nextId = 1;
-    this.opponent = null;   // competition: best of the previous generation
+    this.opponent = null;   // competition and cooperation: best of the previous generation
     this.champ = null;      // this population's best of the latest generation
     this.teams = teams === 2 && TASKS[task].pair ? 2 : 1;
     this.rival = this.teams === 2 ? new Evolver({ task, popSize, survival, seed: seed * 7919 + 101, evaluate, body, islands, migrate, novelty, structural, scene }) : null;
@@ -148,10 +148,10 @@ export class Evolver {
     // the scene changed (main.js): scores from the old one don't carry over
     if (this.rescore) { this.rescore = false; for (const p of this.pop) p.fit = null; }
     // tasks whose conditions change between generations get re-evaluated
-    const varying = task.kind === 'follow' || task.kind === 'compete';
+    const varying = task.kind === 'follow' || !!task.pair;
     const phase = task.kind === 'follow' ? rng() * 2 * Math.PI : 0;
     const todo = this.pop.filter(p => varying || p.fit === null);
-    if (task.kind === 'compete' && !this.opponent) this.opponent = this.pop[rng.int(this.pop.length)].g;
+    if (task.pair && !this.opponent) this.opponent = this.pop[rng.int(this.pop.length)].g;
     const jobs = todo.map(p => ({
       task: this.task,
       genomes: task.pair ? [p.g, this.opponent] : [p.g],
@@ -241,7 +241,7 @@ export class Evolver {
     kids.forEach((k, i) => { k.fit = res[i][0]; });
     if (this.rival) await this.rival.mateIslands();
     kids.sort((x, y) => y.fit - x.fit);
-    const varying = task.kind === 'follow' || task.kind === 'compete';
+    const varying = task.kind === 'follow' || !!task.pair;
     const placed = new Set();
     kids.slice(0, 2 * this.islands).forEach((k, i) => {
       const isl = i % this.islands;

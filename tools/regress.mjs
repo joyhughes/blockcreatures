@@ -5,6 +5,7 @@ import { initPhysics, evaluate, TASKS } from '../src/sim.js';
 await initPhysics();
 const out = {};
 for (const t of Object.keys(TASKS)) {
+  if (!existsSync(`champions/${t}.json`)) continue;
   const c = JSON.parse(readFileSync(`champions/${t}.json`));
   out[t] = evaluate(t, c.opponent ? [c.genome, c.opponent] : [c.genome], { phase: c.phase, scene: c.scene })[0];
 }

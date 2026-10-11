@@ -1,4 +1,4 @@
-import { initPhysics, Sim, TASKS, DT, SCENE, sceneFor } from './sim.js';
+import { initPhysics, Sim, TASKS, DT, sceneFor, defaultScene } from './sim.js';
 import { Evolver } from './evolve.js';
 import { Pool } from './pool.js';
 import { View } from './view.js';
@@ -6,7 +6,7 @@ import { makeRng } from './math.js';
 import { Recorder } from './record.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -52,14 +52,14 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
-  grip: 'scGrip', settle: 'scSettle' };
+  grip: 'scGrip', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize' };
 function readScene() {
   const s = {};
   for (const [k, id] of Object.entries(SC_FIELDS)) {
     const el = $(id);
     if (el.type === 'checkbox') s[k] = el.checked;
     else if (el.tagName === 'SELECT') s[k] = el.value;
-    else s[k] = el.value === '' || !isFinite(+el.value) ? SCENE[k] : +el.value;
+    else s[k] = el.value === '' || !isFinite(+el.value) ? defaultScene(task)[k] : +el.value;
   }
   return s;
 }
@@ -77,7 +77,7 @@ function showScene() {
   const t = TASKS[task];
   $('scDuration').placeholder = String(t.duration);
   for (const el of document.querySelectorAll('[data-env]')) el.hidden = el.dataset.env !== t.env;
-  for (const el of document.querySelectorAll('[data-kind]')) el.hidden = el.dataset.kind !== t.kind;
+  for (const el of document.querySelectorAll('[data-kind]')) el.hidden = !el.dataset.kind.split(' ').includes(t.kind);
   const s = evolver?.scene;
   $('sceneNote').textContent = !s ? 'This run uses the original scene: timed settling with friction; in competition a 0.8 m cube 1.5 m away.'
     : evolver.sceneGen > 0 ? `Scene changed at generation ${evolver.sceneGen}; fitness before and after isn't comparable.` : '';
@@ -94,7 +94,7 @@ function sceneChanged() {
   }
 }
 for (const id of Object.values(SC_FIELDS)) $(id).onchange = sceneChanged;
-$('scReset').onclick = () => { writeScene(SCENE); sceneChanged(); };
+$('scReset').onclick = () => { writeScene(defaultScene(task)); sceneChanged(); };
 
 // ---------------------------------------------------------------- body plan
 let planType = 'free';
@@ -139,7 +139,8 @@ function newRun() {
 }
 function switchRun() {
   const r = runs.get(runKey());
-  if (!r) { newRun(); loadChampion(); return; }
+  // a target's first run: the panel's scene, with the target's own ball
+  if (!r) { writeScene({ ...readScene(), ...(TASKS[task].scene || {}) }); newRun(); loadChampion(); return; }
   evolver = r;
   $('pop').value = r.popSize;
   $('islands').value = String(r.islands);
@@ -161,7 +162,7 @@ async function evolveLoop() {
   evalT0 = performance.now(); evalCount = 0;
   while (running) {
     const before = evolver.pop.filter(p => p.fit === null).length;
-    const varying = ['follow', 'compete'].includes(TASKS[task].kind);
+    const varying = TASKS[task].kind === 'follow' || !!TASKS[task].pair;
     const h = await evolver.step();
     evalCount += (varying ? evolver.popSize * TASKS[task].trials : before) * evolver.teams;
     const secs = (performance.now() - evalT0) / 1000;
@@ -169,7 +170,9 @@ async function evolveLoop() {
     // watching latest: switch once the current replay has played out
     if ($('follow').checked) {
       const g = $('show').value === 'ever' ? bestGen() : h.gen;
-      if (!replay || replay.gen === undefined) showGen(g, false);
+      // a champion or example on screen gives way at once, unless it's being
+      // recorded: then the new generation waits for the clip to finish
+      if (!replay || (replay.gen === undefined && !recorder.recording)) showGen(g, false);
       else pendingGen = g;
     }
     refresh();
@@ -269,12 +272,13 @@ function showGen(gen, user = true) {
   const r = { genome: h.genome, opponent: h.opponent, phase: h.phase, scene: h.scene, gen, show: mode, fitness: h.best,
     label: (mode === 'ever' ? `best so far: generation ${gen}` : `generation ${gen} best`) + (ti >= 0 ? ` (island ${ti + 1})` : '') };
   // two teams: the creature shown is team A's, facing team B's previous best
+  const vs = TASKS[task].kind === 'cooperate' ? 'with' : 'against';
   if (h.rivalGenome) {
-    r.label = r.label.replace(/best/, 'team A best') + `, against team B's best of generation ${gen - 1}`;
+    r.label = r.label.replace(/best/, 'team A best') + `, ${vs} team B's best of generation ${gen - 1}`;
     if (gen === 0) r.label = r.label.replace(/team B's best of generation -1/, 'a random team B creature');
   }
   if (mode === 'rival' && h.rivalGenome) Object.assign(r, { genome: h.rivalGenome, opponent: h.rivalOpponent, fitness: h.rivalBest,
-    label: `generation ${gen} team B best, against ` + (gen ? `team A's best of generation ${gen - 1}` : 'a random team A creature') });
+    label: `generation ${gen} team B best, ${vs} ` + (gen ? `team A's best of generation ${gen - 1}` : 'a random team A creature') });
   const lp = evolver.lastPop;
   if ((mode === 'top' || mode === 'all') && lp && lp.gen === gen) {
     const m = mode === 'top' ? lp.members.slice(0, 25) : lp.members;
@@ -698,6 +702,7 @@ function hudText(finalFit) {
   let s = `t = ${Math.max(0, sim.t - (sim.tStart ?? sim.t)).toFixed(1)} / ${sim.T}s`;
   if (sim.settling) s = sim.relaxing && sim.tStart === null ? `relaxing ${sim.t.toFixed(1)}s (no friction, no muscles)` : `settling ${sim.t.toFixed(1)}s`;
   if (T.trials > 1) s += ` · trial ${replay.trial + 1}/${T.trials}`;
+  if (sim.coop) s += sim.scored !== null ? ` · GOAL at ${sim.scored.toFixed(1)}s` : sim.tStart !== null ? ` · ball ${sim.ballToGoal().toFixed(2)} m from the goal` : '';
   if (finalFit !== undefined) s += ` · this trial ${finalFit.toFixed(3)} ${UNITS[T.kind]}`;
   else if (replay.fitness !== undefined) s += ` · fitness ${replay.fitness.toFixed(3)} ${UNITS[T.kind]}`;
   if (sims.length > 1) return s + ` · ${sims.length} creatures` + (slowed ? ', slowed down to keep up' : '') + (replay.focus >= 0 ? ' · Esc or click empty space to zoom out' : ' · click a creature to zoom in');
@@ -707,7 +712,7 @@ function hudText(finalFit) {
 }
 
 showPlan();
-writeScene(SCENE);
+writeScene(defaultScene('swim'));
 setTask('swim');
 requestAnimationFrame(frame);
 window.bc = { get evolver() { return evolver; }, get sim() { return sim; }, view, pool };

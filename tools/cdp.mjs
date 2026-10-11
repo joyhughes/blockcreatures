@@ -9,7 +9,7 @@ const proc = spawn(chrome, ['--headless=new', `--remote-debugging-port=${port}`,
   '--window-size=1400,850', `--user-data-dir=${tmpdir()}/cdp-${port}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let ws;
-for (let i = 0; i < 50; i++) {
+for (let i = 0; i < 300; i++) {   // up to 60 s: Chrome starts slowly on a busy machine
   try {
     const list = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
     const page = list.find(t => t.type === 'page');

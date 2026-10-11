@@ -40,7 +40,12 @@ export const TASKS = {
   jump: { label: 'Jumping', env: 'land', duration: 6, settle: 1.5, trials: 1, kind: 'jump' },
   followWater: { label: 'Following (water)', env: 'water', duration: 8, settle: 0, trials: 3, kind: 'follow' },
   followLand: { label: 'Following (land)', env: 'land', duration: 8, settle: 1, trials: 3, kind: 'follow' },
-  compete: { label: 'Competition', env: 'land', duration: 10, settle: 0.5, trials: 1, kind: 'compete', pair: true },
+  compete: { label: 'Competition', env: 'land', duration: 10, settle: 0.5, trials: 1, kind: 'compete', pair: true,
+    scene: { ballSize: 0.25, ballMass: 0.15 } },
+  // both start behind a heavy ball and share one score for getting it into
+  // the goal: progress toward it, or 1 + the share of time left on scoring
+  cooperate: { label: 'Cooperation', env: 'land', duration: 15, settle: 0.5, trials: 1, kind: 'cooperate', pair: true,
+    scene: { ballSize: 0.35, ballMass: 0.6 } },
 };
 
 // Scene parameters, adjustable per run (the UI's Scene section). A run's
@@ -60,23 +65,30 @@ export const TASKS = {
 //              (wrapping around it) shortens your distance by up to the ball's radius
 //   settle     on land, before scoring: 'stable' (Sims) = no friction and no muscles until the
 //              centre of mass stops dropping; 'timed' = the task's fixed settle time, friction on
+//   goalDist   cooperation: the goal's centre, this far from the ball's start (m), away from the creatures
+//   goalSize   cooperation: the goal's radius; the ball is in when its centre is inside
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 2.5, zone: 'plane', slope: 45, maxVolume: 0.6, grip: true,
-  settle: 'stable',
+  settle: 'stable', goalDist: 3, goalSize: 0.6,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
 export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed' };
+// a task's default scene: SCENE with the task's own ball
+export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
-  // scenes saved before a setting existed get its old behaviour
+  // scenes saved before a setting existed get its old behaviour; cooperation
+  // came after scenes, so it has no legacy scene
   const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed' };
-  const s = { ...SCENE, ...(scene ? old : LEGACY_SCENE), ...(scene || {}) };
+  const legacy = TASKS[taskName].kind === 'cooperate' ? {} : LEGACY_SCENE;
+  const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
   return s;
 }
 const RELAX_STILL = 0.5;   // stable: the centre of mass hasn't dropped for this long (s)
 const RELAX_MIN = 0.3, RELAX_MAX = 5;   // ... but at least / at most this long
-const BALL_ROLL = 0.02;    // rolling resistance of the ball: it rolls far, but stops
+const BALL_ROLL = 0.02;
+const COOP_SPACING = 0.5;   // cooperation: gap between the two creatures at the start (m)    // rolling resistance of the ball: it rolls far, but stops
 
 const yawQuat = a => ({ x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) });
 const V = a => ({ x: a[0], y: a[1], z: a[2] });
@@ -622,7 +634,8 @@ export class Sim {
     // the competition's ball (or cube); `cube` is the body, whichever shape
     this.cube = null;
     const copts = { friction: this.relaxing ? 0 : sc.friction, drag: sc.drag, groundHandle: this.groundHandle };
-    if (task.kind === 'compete') {
+    if (task.pair) {
+      const coop = this.coop = task.kind === 'cooperate';
       const r = this.ballR = sc.ballSize, sphere = this.ballSphere = sc.ball === 'sphere';
       const vol = sphere ? 4 / 3 * Math.PI * r ** 3 : 8 * r ** 3;
       const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, r, 0).setCanSleep(false));
@@ -631,9 +644,20 @@ export class Sim {
       this.cube = body;
       this.creatures = genomes.map((g, i) => new Creature(world, g, { ...copts,
         ground: true, maxVolume: sc.maxVolume,
-        side: i ? 1 : -1, yaw: i ? Math.PI : 0,
+        side: i && !coop ? 1 : -1, yaw: i && !coop ? Math.PI : 0,
         clear: sc.gap, clearBody: sc.zone === 'length',
       }));
+      // cooperation: both behind the ball, side by side with their near sides
+      // COOP_SPACING apart across the line to the goal
+      if (coop) {
+        this.goal = [sc.goalDist, 0, 0];
+        this.scored = null;   // seconds into the measured time when the ball went in
+        this.creatures.forEach((c, i) => {
+          if (!c.valid) return;
+          const s = i ? 1 : -1;
+          c.shift([0, 0, s * COOP_SPACING / 2 - c.minAlong([0, 0, s]) * s]);
+        });
+      }
       // the plane zone: placed against it as built, and kept against it
       // every step while relaxing (relaxStep)
       if (sc.zone === 'plane') this.placeInZone();
@@ -664,7 +688,7 @@ export class Sim {
     const sc = this.scene, k = 1 / Math.tan(Math.max(1, Math.min(90, sc.slope)) * Math.PI / 180);
     this.creatures.forEach((c, i) => {
       if (!c.valid) return;
-      const s = i ? 1 : -1;
+      const s = i && !this.coop ? 1 : -1;
       const m = c.minAlong([s, -k, 0]);   // min of (distance from the ball) - k * height
       c.shift([s * (sc.gap - m), 0, 0]);
     });
@@ -706,7 +730,9 @@ export class Sim {
       const c = cs[i];
       if (!c.valid || this.failed[i]) continue;
       let target = this.light || cube, other = null;
-      if (task.pair && cs[1 - i] && cs[1 - i].valid) other = cs[1 - i].com();
+      // cooperation: the second photosensor sees the goal instead of the partner
+      if (this.coop) other = this.goal;
+      else if (task.pair && cs[1 - i] && cs[1 - i].valid) other = cs[1 - i].com();
       c.sense(world, target, other);
       brainStep(c.brain, DT / 2);
       brainStep(c.brain, DT / 2);
@@ -727,6 +753,11 @@ export class Sim {
       if (this.tStart !== null && this.t >= this.tStart) this.trackStep(i);
     }
     if (this.tStart === null) this.relaxStep();
+    // cooperation: a goal ends the game
+    if (this.coop && this.tStart !== null && this.t >= this.tStart && this.scored === null && this.ballToGoal() <= this.scene.goalSize) {
+      this.scored = this.t - this.tStart;
+      this.totalSteps = this.steps;
+    }
     // Energy audit. x = full mechanical energy (translation, rotation,
     // gravity; creatures and cube) minus the start and minus muscle work.
     // Physics only ever lowers x (friction, drag, damping, inelastic joint
@@ -812,12 +843,35 @@ export class Sim {
       const d = len(sub(c.com(), this.light));
       if (tr.start === null) tr.start = d;
       tr.last = d;
+    } else if (task.kind === 'cooperate') {
+      const d = c.distanceTo(this.cubePos());
+      if (tr.start === null) tr.start = d;
+      tr.last = d;
     }
   }
+
+  // cooperation: horizontal distance from the ball's centre to the goal's
+  ballToGoal() { const b = this.cubePos(); return Math.hypot(b[0] - this.goal[0], b[2] - this.goal[2]); }
 
   // fitness of each creature in this trial
   fitness() {
     const task = this.task, T = this.T;
+    if (this.coop) {
+      // shared: 0.8 x the share of the way the ball got to the goal's edge,
+      // plus 0.2 x the share of their distance to the ball the two closed on
+      // average (so creatures that never touch it can still improve); on a
+      // goal, 1 + the share of the time left (1..2). A blown-up simulation
+      // scores nothing for either.
+      const cs = this.creatures;
+      if (cs.every(c => !c.valid) || cs.some((c, i) => c.valid && this.failed[i])) return cs.map(() => 0);
+      const sc = this.scene;
+      const clamp = x => Math.max(0, Math.min(1, x));
+      const live = cs.map((c, i) => this.track[i]).filter((tr, i) => cs[i].valid && tr.start > 0);
+      const near = live.reduce((t, tr) => t + clamp(1 - tr.last / tr.start), 0) / Math.max(1, live.length);
+      const f = this.scored !== null ? 1 + Math.max(0, 1 - this.scored / T)
+        : 0.8 * clamp((sc.goalDist - this.ballToGoal()) / Math.max(0.01, sc.goalDist - sc.goalSize)) + 0.2 * near;
+      return cs.map(() => f);
+    }
     if (task.kind === 'compete') {
       const cube = this.cubePos();
       const d = this.creatures.map((c, i) => (c.valid && !this.failed[i] ? c.distanceTo(cube) - (this.scene.grip ? this.grip(c) : 0) : Infinity));

@@ -87,6 +87,9 @@ export class View {
     const bt = new THREE.CanvasTexture(bc);
     bt.colorSpace = THREE.SRGBColorSpace;
     this.ballMat = new THREE.MeshStandardMaterial({ map: bt, roughness: 0.45 });
+    // cooperation: the goal, a ring with a faint disc, flat on the ground
+    this.goalMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    this.goalFill = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false });
     this.cube = new THREE.Mesh(this.cubeGeo, this.cubeMat);
     this.cube.castShadow = true;
     this.scene.add(this.cube);
@@ -148,7 +151,8 @@ export class View {
     const big = Math.max(...sims.map(sizeOf));
     // competition: room for both contestants at their start distance
     const sc = sims[0].scene;
-    this.arena = sims[0].cube ? 2 * (sc.gap + (sc.zone !== 'none' ? 2 * big : big)) : 0;
+    const reach = sc.gap + (sc.zone !== 'none' ? 2 * big : big);
+    this.arena = !sims[0].cube ? 0 : sims[0].coop ? reach + sc.goalDist + sc.goalSize : 2 * reach;
     const gap = sims[0].cube ? Math.max(9, this.arena + 3) : Math.max(3, 2.6 * big);
     const cols = Math.ceil(Math.sqrt(sims.length));
     this.gridSize = gap * cols;
@@ -168,6 +172,16 @@ export class View {
         cell.cube.geometry = sim.ballSphere ? this.ballGeo : this.cubeGeo;
         cell.cube.material = sim.ballSphere ? this.ballMat : this.cubeMat;
         cell.cube.scale.setScalar(sim.ballR);
+      }
+      if (sim.goal) {
+        const R = sim.scene.goalSize, ring = new THREE.RingGeometry(Math.max(0, R - 0.06), R, 64), disc = new THREE.CircleGeometry(R, 64);
+        this.owned.push(ring, disc);
+        for (const [geo, mat, y] of [[disc, this.goalFill, 0.004], [ring, this.goalMat, 0.006]]) {
+          const m = new THREE.Mesh(geo, mat);
+          m.rotation.x = -Math.PI / 2;
+          m.position.set(sim.goal[0], y, sim.goal[2]).add(off);
+          this.add(m);
+        }
       }
       // Labels: in small crowds, a fixed size on screen; in bigger ones they
       // shrink with distance like the creatures do, and past 25 show only
