@@ -8,10 +8,43 @@ evolved together, for the same evolutionary targets Sims used:
 | Target | Environment | Fitness (as in Sims) |
 |---|---|---|
 | Swimming | water: no gravity, viscous drag on every face | COM speed: ½ × max distance from start / T + ½ × speed over the final third (rewards straight, sustained motion) |
-| Walking | land: gravity, ground friction | same, horizontal, measured after a 1.5 s settling period so falling over doesn't count |
+| Walking | land: gravity, ground friction | same, horizontal, measured after the body has relaxed (see below) so falling over doesn't count |
 | Jumping | land | maximum height reached by the *lowest* part of the creature |
 | Following (water / land) | either | closing speed toward a light source, averaged over 3 trials with the light in different directions; per-block photosensors |
-| Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball; each creature competes against the previous generation's best ("all vs. best"); sizes capped at equal volume |
+| Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball, less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"); sizes capped at equal volume |
+
+### Falling over: Sims' rules
+
+Evolution's first trick on land is to be tall and fall over. Sims' papers
+use five defences, all of which are used here:
+
+1. **Relax before scoring** (*Evolving Virtual Creatures*, §5.2): "first
+   running the simulation with no friction and no effector forces until the
+   height of the center of mass reaches a stable minimum." Without friction a
+   toppling body can't push itself anywhere: with no horizontal force on it,
+   its centre of mass falls straight down. Settling ends when the centre of
+   mass hasn't dropped (by 1 mm) for 0.5 s, after at least 0.3 s and at most
+   5 s; then friction and muscles come on and the clock starts.
+2. **Walking counts only horizontal motion.**
+3. **Jumping scores the lowest part's height**, which a toppling body keeps
+   on the ground.
+4. **Diagonal starting zones** (*Evolving 3D Morphology and Behavior by
+   Competition*, §2): each contestant starts "behind a diagonal plane
+   slanting up and away from the cube", "so taller creatures must start
+   further back." With a 45° plane, a point at height h starts at least h
+   further back, which is as far as toppling carries it. A long, low crawler
+   isn't pushed back at all.
+5. **Relax before placing**: contestants relax (rule 1) far out, then each is
+   moved straight toward the ball until it touches its plane, in its
+   slumped posture.
+
+Competition also has Sims' **control bonus**: "further decreasing the
+distance value ... when a creature is touching the cube on the side that
+opposes its center of mass". Here, a part touching the ball at a point whose
+direction from the ball's centre lines up with the line from the creature's
+centre of mass through the ball takes up to the ball's radius off its
+distance, in proportion (fully round the far side: the whole radius; touching
+from the near side: nothing).
 
 ## Body plans and round parts (beyond Sims)
 
@@ -157,19 +190,23 @@ The **Scene** panel sets the world a run is scored in:
   the target's default).
 - **Gravity** and **Friction** on land; **Viscosity** in water.
 - **Light distance** for following.
+- **Settle** on land: *Sims: relax until still* (default; rule 1 above), or
+  *timed, with friction* (this project's earlier fixed 0.5–1.5 s).
 - Competition: the **Prize**, a ball (default) or Sims' cube, with its
   **Size** and **Mass**. The ball rolls, with a little rolling resistance, so
-  creatures can push and dribble it. **Start distance** puts each contestant's
-  near side that far from the prize. **+ body length** adds each contestant's
-  own longest dimension, so a tall body can't win by toppling onto the prize.
-  **Size cap** scales bigger contestants down to that volume.
+  creatures can push and dribble it. **Start distance** is where the start
+  zone meets the ground. **Start zone**: *Sims' slope* (default; rules 4–5),
+  with its **Slope** angle (90° = height doesn't count); *+ body length* (the
+  contestant's longest dimension is added); or *none*. **Size cap** scales
+  bigger contestants down to that volume. **Wrap bonus** turns Sims' control
+  bonus on or off.
 
 The scene belongs to the run: it is saved with it, recorded in each
 generation's history, and used when that generation is replayed. Changing it
 mid-run re-scores everyone from the next generation (the note says from which
 generation scores aren't comparable), and replays the creature on screen in
 the new scene straight away. Creatures saved before scenes existed replay in
-the scene they evolved in (a 0.8 m cube 1.5 m away).
+the scene they evolved in (timed settling; a 0.8 m cube 1.5 m away).
 
 **Examples ▸** replays example creatures, including hand-built tentacles.
 **Evolve from this** starts a new run seeded with mutants of whatever creature
@@ -313,7 +350,8 @@ position and chain position.
 - **Water drag** is integrated over a 3×3 grid on each face. With only one
   sample at the face centre, a plate spinning about an in-plane axis felt no
   drag, and evolution promptly found that.
-- **Falling isn't moving**: a tall creature that stays up through the
+- **Falling isn't moving** (a backstop to Sims' rules above, and the only
+  defence in the timed settle): a tall creature that stays up through the
   settling period and then topples carries its centre of mass forward about
   as far as it drops (H/2 for a stick of height H). On land, the drop of the
   centre of mass below its height when measuring began is subtracted from

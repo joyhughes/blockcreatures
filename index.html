@@ -156,6 +156,7 @@
     <label title="Seconds each creature is scored for, after settling. Blank = this target's default">Lifespan <input type="number" id="scDuration" min="2" max="60" step="1"> s</label>
     <label data-env="land" title="Gravity on land, m/s². Earth 9.81, Moon 1.62, Mars 3.71">Gravity <input type="number" id="scGravity" min="0.5" max="30" step="0.1"></label>
     <label data-env="land" title="Friction between bodies and the ground (and the ball). Low = icy">Friction <input type="number" id="scFriction" min="0" max="3" step="0.1"></label>
+    <label data-env="land" title="Before scoring, on land. Sims: relax with no friction and no muscles until the centre of mass stops dropping, so toppling can't carry a body forward. Timed: a fixed settle time with friction (this project's earlier behaviour)">Settle <select id="scSettle"><option value="stable">Sims: relax until still</option><option value="timed">timed, with friction</option></select></label>
     <label data-env="water" title="Water viscosity: how hard the water pushes back on a moving part">Viscosity <input type="number" id="scDrag" min="0.2" max="20" step="0.2"></label>
     <label data-kind="follow" title="How far away the light starts">Light distance <input type="number" id="scLightDist" min="1" max="30" step="0.5"> m</label>
   </div>
@@ -165,9 +166,13 @@
     <label title="Mass of the ball or cube">Mass <input type="number" id="scBallMass" min="0.01" max="5" step="0.01"> kg</label>
   </div>
   <div class="row" data-kind="compete" style="margin-top:8px">
-    <label title="Each contestant starts with its near side this far from the prize's centre">Start distance <input type="number" id="scGap" min="0.5" max="20" step="0.5"> m</label>
-    <label title="Also add each contestant's own length to its start distance, so a tall body can't win by toppling onto the prize"><input type="checkbox" id="scGapBody"> + body length</label>
+    <label title="Distance from the prize's centre to the start zone, at ground level">Start distance <input type="number" id="scGap" min="0.5" max="20" step="0.5"> m</label>
+    <label title="Sims' start zone: after relaxing, each contestant is moved up to a plane rising from the ground at the start distance, so taller bodies start further back and toppling can't reach the prize. Body length: the longest dimension is added to the start distance. None: near side at the start distance">Start zone <select id="scZone"><option value="plane">Sims' slope</option><option value="length">+ body length</option><option value="none">none</option></select></label>
+    <label title="The start zone plane's angle above the ground. 45°: a point at height h starts h further back. 90°: height doesn't matter">Slope <input type="number" id="scSlope" min="10" max="90" step="5">°</label>
+  </div>
+  <div class="row" data-kind="compete" style="margin-top:8px">
     <label title="Contestants bigger than this are scaled down to it">Size cap <input type="number" id="scMaxVolume" min="0.1" max="3" step="0.1"> m³</label>
+    <label title="Sims' control bonus: touching the prize on the side away from your own centre of mass (wrapping around it) takes up to its radius off your distance"><input type="checkbox" id="scGrip"> Wrap bonus</label>
   </div>
   <div class="row" style="margin-top:8px"><button id="scReset" title="Restore the default scene">Default scene</button></div>
   <p class="note" id="sceneNote"></p>

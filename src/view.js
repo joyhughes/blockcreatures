@@ -148,7 +148,7 @@ export class View {
     const big = Math.max(...sims.map(sizeOf));
     // competition: room for both contestants at their start distance
     const sc = sims[0].scene;
-    this.arena = sims[0].cube ? 2 * (sc.gap + (sc.gapBody ? 2 * big : big)) : 0;
+    this.arena = sims[0].cube ? 2 * (sc.gap + (sc.zone !== 'none' ? 2 * big : big)) : 0;
     const gap = sims[0].cube ? Math.max(9, this.arena + 3) : Math.max(3, 2.6 * big);
     const cols = Math.ceil(Math.sqrt(sims.length));
     this.gridSize = gap * cols;

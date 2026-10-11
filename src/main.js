@@ -51,7 +51,8 @@ function setTask(key) {
 // everyone from the next generation, and the creature on screen replays in
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', lightDist: 'scLightDist',
-  ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', gapBody: 'scGapBody', maxVolume: 'scMaxVolume' };
+  ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
+  grip: 'scGrip', settle: 'scSettle' };
 function readScene() {
   const s = {};
   for (const [k, id] of Object.entries(SC_FIELDS)) {
@@ -78,7 +79,7 @@ function showScene() {
   for (const el of document.querySelectorAll('[data-env]')) el.hidden = el.dataset.env !== t.env;
   for (const el of document.querySelectorAll('[data-kind]')) el.hidden = el.dataset.kind !== t.kind;
   const s = evolver?.scene;
-  $('sceneNote').textContent = !s ? 'This run uses the original scene (a 0.8 m cube 1.5 m away in competition).'
+  $('sceneNote').textContent = !s ? 'This run uses the original scene: timed settling with friction; in competition a 0.8 m cube 1.5 m away.'
     : evolver.sceneGen > 0 ? `Scene changed at generation ${evolver.sceneGen}; fitness before and after isn't comparable.` : '';
 }
 function sceneChanged() {
@@ -672,8 +673,8 @@ function frame(now) {
 
 function hudText(finalFit) {
   const T = TASKS[rtask()];
-  let s = `t = ${Math.max(0, sim.t - T.settle).toFixed(1)} / ${sim.T}s`;
-  if (sim.t < T.settle) s = `settling ${sim.t.toFixed(1)}s`;
+  let s = `t = ${Math.max(0, sim.t - (sim.tStart ?? sim.t)).toFixed(1)} / ${sim.T}s`;
+  if (sim.settling) s = sim.relaxing && sim.tStart === null ? `relaxing ${sim.t.toFixed(1)}s (no friction, no muscles)` : `settling ${sim.t.toFixed(1)}s`;
   if (T.trials > 1) s += ` · trial ${replay.trial + 1}/${T.trials}`;
   if (finalFit !== undefined) s += ` · this trial ${finalFit.toFixed(3)} ${UNITS[T.kind]}`;
   else if (replay.fitness !== undefined) s += ` · fitness ${replay.fitness.toFixed(3)} ${UNITS[T.kind]}`;

@@ -50,20 +50,32 @@ export const TASKS = {
 //   gravity    m/s^2 on land          friction   ground and body friction
 //   drag       water viscosity        lightDist  light's distance (following)
 //   ball       'sphere' | 'cube'      ballSize   radius / half side (m)
-//   ballMass   kg                     gap        each contestant's start: near side this far from the ball centre
-//   gapBody    add the contestant's own length to `gap`, so a tall body can't just topple onto the ball
+//   ballMass   kg                     gap        start distance from the ball centre, at ground level
+//   zone       starting zone (as Sims): 'plane' = behind a plane rising from the ground `gap` from
+//              the ball at `slope` degrees, so taller bodies start further back; 'length' = the
+//              contestant's longest dimension is added to `gap`; 'none' = near side at `gap`
+//   slope      the plane's angle above the ground (45 = a point at height h starts h further back)
 //   maxVolume  contestants are scaled down to at most this volume (m^3)
+//   grip       Sims' control bonus: touching the ball on the far side from your own centre of mass
+//              (wrapping around it) shortens your distance by up to the ball's radius
+//   settle     on land, before scoring: 'stable' (Sims) = no friction and no muscles until the
+//              centre of mass stops dropping; 'timed' = the task's fixed settle time, friction on
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
-  ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 2.5, gapBody: true, maxVolume: 0.6,
+  ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 2.5, zone: 'plane', slope: 45, maxVolume: 0.6, grip: true,
+  settle: 'stable',
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, gapBody: false };
+export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed' };
 export function sceneFor(taskName, scene) {
-  const s = { ...SCENE, ...(scene || LEGACY_SCENE) };
+  // scenes saved before a setting existed get its old behaviour
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed' };
+  const s = { ...SCENE, ...(scene ? old : LEGACY_SCENE), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
   return s;
 }
+const RELAX_STILL = 0.5;   // stable: the centre of mass hasn't dropped for this long (s)
+const RELAX_MIN = 0.3, RELAX_MAX = 5;   // ... but at least / at most this long
 const BALL_ROLL = 0.02;    // rolling resistance of the ball: it rolls far, but stops
 
 const yawQuat = a => ({ x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) });
@@ -313,6 +325,39 @@ export class Creature {
     return scale(c, 1 / this.totalMass);
   }
 
+  // min over the creature's points of dot(point, w), w any direction
+  minAlong(w) {
+    const n = len(w), u = scale(w, 1 / n);
+    let m = Infinity;
+    for (let i = 0; i < this.parts.length; i++) {
+      const { c, q } = this.partPose(i);
+      const axes = [qrot(q, [1, 0, 0]), qrot(q, [0, 1, 0]), qrot(q, [0, 0, 1])];
+      m = Math.min(m, dot(c, w) - n * support(this.parts[i], axes, u));
+    }
+    return m;
+  }
+
+  // move the whole creature rigidly (joints are unaffected)
+  shift(d) {
+    for (const b of this.bodies) { const t = b.translation(); b.setTranslation({ x: t.x + d[0], y: t.y + d[1], z: t.z + d[2] }, true); }
+    this.read();
+  }
+
+  setFriction(f) { for (const col of this.colliders) col.setFriction(f); }
+
+  // closest point of part i to world point pt (box-like clamp; exact for boxes)
+  closestPoint(i, pt) {
+    const { c, q } = this.partPose(i), p = this.parts[i], h = p.half;
+    const l = qrot(qconj(q), sub(pt, c));
+    let k;
+    if (p.shape === 'sphere') { const d = len(l); k = d > h[0] ? scale(l, h[0] / d) : l; }
+    else if (p.shape === 'capsule') {
+      const a = Math.max(-(h[0] - h[1]), Math.min(h[0] - h[1], l[0])), r = sub(l, [a, 0, 0]), d = len(r);
+      k = add([a, 0, 0], d > h[1] ? scale(r, h[1] / d) : r);
+    } else k = l.map((x, j) => Math.max(-h[j], Math.min(h[j], x)));
+    return add(c, qrot(q, k));
+  }
+
   lowest() {
     let m = Infinity;
     for (let i = 0; i < this.parts.length; i++) {
@@ -559,6 +604,9 @@ export class Sim {
     this.T = sc.duration;
     const land = task.env === 'land';
     this.g = land ? sc.gravity : 0;
+    // Sims' settling: relax with no friction and no muscles until the centre
+    // of mass stops dropping; toppling then can't carry the body anywhere
+    this.relaxing = land && sc.settle === 'stable';
     const world = this.world = new RAPIER.World({ x: 0, y: -this.g, z: 0 });
     world.timestep = DT;
     // extra solver iterations: with 4, contacts on small, light round parts
@@ -567,35 +615,87 @@ export class Sim {
     if (land) {
       // an analytic half-space: Rapier's box-vs-cylinder contacts are its
       // least robust, and spinning cylinders on a box floor gained energy
-      this.groundHandle = world.createCollider(new RAPIER.ColliderDesc(new RAPIER.HalfSpace({ x: 0, y: 1, z: 0 })).setFriction(sc.friction)).handle;
+      this.groundCol = world.createCollider(new RAPIER.ColliderDesc(new RAPIER.HalfSpace({ x: 0, y: 1, z: 0 })).setFriction(this.relaxing ? 0 : sc.friction));
+      this.groundHandle = this.groundCol.handle;
     }
     this.light = task.kind === 'follow' ? lightPos(taskName, trial, phase, sc.lightDist) : null;
     // the competition's ball (or cube); `cube` is the body, whichever shape
     this.cube = null;
-    const copts = { friction: sc.friction, drag: sc.drag, groundHandle: this.groundHandle };
+    const copts = { friction: this.relaxing ? 0 : sc.friction, drag: sc.drag, groundHandle: this.groundHandle };
     if (task.kind === 'compete') {
       const r = this.ballR = sc.ballSize, sphere = this.ballSphere = sc.ball === 'sphere';
       const vol = sphere ? 4 / 3 * Math.PI * r ** 3 : 8 * r ** 3;
       const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, r, 0).setCanSleep(false));
-      world.createCollider((sphere ? RAPIER.ColliderDesc.ball(r) : RAPIER.ColliderDesc.cuboid(r, r, r))
+      this.ballCol = world.createCollider((sphere ? RAPIER.ColliderDesc.ball(r) : RAPIER.ColliderDesc.cuboid(r, r, r))
         .setDensity(sc.ballMass / vol).setFriction(sc.friction), body);
       this.cube = body;
       this.creatures = genomes.map((g, i) => new Creature(world, g, { ...copts,
         ground: true, maxVolume: sc.maxVolume,
-        side: i ? 1 : -1, clear: sc.gap, clearBody: sc.gapBody, yaw: i ? Math.PI : 0,
+        side: i ? 1 : -1, yaw: i ? Math.PI : 0,
+        clear: sc.gap, clearBody: sc.zone === 'length',
       }));
+      // the plane zone: placed against it as built; when relaxing, a body
+      // length further back so its sprawl can't reach the prize, and moved
+      // up against it again once relaxed (relaxStep)
+      if (sc.zone === 'plane') {
+        this.placeInZone();
+        if (this.relaxing) this.creatures.forEach((c, i) => {
+          if (!c.valid) return;
+          const s = i ? 1 : -1, L = Math.max(...[[1, 0, 0], [0, 1, 0], [0, 0, 1]].map(w => -c.minAlong(w.map(x => -x)) - c.minAlong(w)));
+          c.shift([s * L, 0, 0]);
+        });
+      }
     } else {
       this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land }));
     }
     this.t = 0;
     this.steps = 0;
-    this.totalSteps = Math.round((task.settle + this.T) / DT);
+    // measuring starts at tStart: after the fixed settle time, or (relaxing)
+    // once every body is still
+    this.tStart = this.relaxing ? null : task.settle;
+    this.totalSteps = this.relaxing ? Infinity : Math.round((task.settle + this.T) / DT);
     this.failed = this.creatures.map(c => !c.valid);
     this.e0 = this.energy();
     this.xMin = 0;
     this.mass = this.creatures.reduce((s, c) => s + (c.valid ? c.totalMass : 0), 0) + (this.cube ? this.cube.mass() : 0);
     this.track = this.creatures.map(() => ({ start: null, mark: null, maxDist: 0, maxLow: 0, d0: 0 }));
-    if (this.creatures.every(c => !c.valid)) this.steps = this.totalSteps;
+    this.relax = this.creatures.map(() => ({ minY: Infinity, still: 0 }));
+    if (this.creatures.every(c => !c.valid)) this.steps = this.totalSteps = 0;
+  }
+
+  get settling() { return this.tStart === null || this.t < this.tStart; }
+
+  // competition: move each contestant toward the ball until it touches the
+  // starting plane (Sims): every point at height y is at least gap + y/tan(slope)
+  // from the ball centre, along the line between the starting zones
+  placeInZone() {
+    const sc = this.scene, k = 1 / Math.tan(Math.max(1, Math.min(90, sc.slope)) * Math.PI / 180);
+    this.creatures.forEach((c, i) => {
+      if (!c.valid) return;
+      const s = i ? 1 : -1;
+      const m = c.minAlong([s, -k, 0]);   // min of (distance from the ball) - k * height
+      c.shift([s * (sc.gap - m), 0, 0]);
+    });
+  }
+
+  // relaxing: a body is still when its centre of mass hasn't dropped for
+  // RELAX_STILL; then friction comes on, contestants move up to their zone,
+  // and measuring starts
+  relaxStep() {
+    let still = this.t >= RELAX_MIN;
+    this.creatures.forEach((c, i) => {
+      if (!c.valid || this.failed[i]) return;
+      const r = this.relax[i], y = c.com()[1];
+      if (y < r.minY - 1e-3) { r.minY = y; r.still = 0; } else r.still += DT;
+      if (r.still < RELAX_STILL) still = false;
+    });
+    if (!still && this.t < RELAX_MAX) return;
+    const f = this.scene.friction;
+    this.groundCol.setFriction(f);
+    this.creatures.forEach(c => { if (c.valid) c.setFriction(f); });
+    if (this.cube && this.scene.zone === 'plane') this.placeInZone();
+    this.tStart = this.t;
+    this.totalSteps = this.steps + Math.round(this.T / DT);
   }
 
   get done() { return this.steps >= this.totalSteps; }
@@ -604,7 +704,7 @@ export class Sim {
 
   step() {
     const { task, world } = this;
-    const active = this.t >= task.settle;
+    const active = this.tStart !== null && this.t >= this.tStart;
     const cube = this.cubePos();
     const cs = this.creatures;
     for (let i = 0; i < cs.length; i++) {
@@ -629,8 +729,9 @@ export class Sim {
       c.read();
       c.creditWork();
       if (c.exploded()) { this.failed[i] = true; continue; }
-      if (this.t >= task.settle) this.trackStep(i);
+      if (this.tStart !== null && this.t >= this.tStart) this.trackStep(i);
     }
+    if (this.tStart === null) this.relaxStep();
     // Energy audit. x = full mechanical energy (translation, rotation,
     // gravity; creatures and cube) minus the start and minus muscle work.
     // Physics only ever lowers x (friction, drag, damping, inelastic joint
@@ -643,6 +744,25 @@ export class Sim {
     const x = this.energy() - this.e0 - work;
     this.xMin = Math.min(this.xMin, x);
     if (x - this.xMin > PHYS.energyTol * this.mass + 0.02) this.failed = cs.map(() => true);
+  }
+
+  // Sims' control bonus: a contestant touching the prize on the side away from
+  // its own centre of mass (wrapped around it) gets up to the prize's radius
+  // off its distance: r * (how far round the far side its touching point is)
+  grip(c) {
+    const ball = this.cubePos(), r = this.ballR;
+    const u0 = sub(ball, c.com()), n = len(u0);
+    if (n < 1e-9) return 0;
+    const u = scale(u0, 1 / n);
+    let best = 0;
+    for (let i = 0; i < c.parts.length; i++) {
+      const p = c.closestPoint(i, ball), rel = sub(p, ball);
+      // touching: within 2 cm of the prize's surface
+      const touch = this.ballSphere ? len(rel) <= r + 0.02
+        : qrot(qconj(this.cube.rotation()), rel).every(x => Math.abs(x) <= r + 0.02);
+      if (touch) best = Math.max(best, dot(rel, u) / Math.max(len(rel), 1e-9));
+    }
+    return r * best;
   }
 
   // rolling resistance for the ball, as for creatures' round parts (Creature.roll)
@@ -669,7 +789,7 @@ export class Sim {
 
   trackStep(i) {
     const c = this.creatures[i], tr = this.track[i], task = this.task;
-    const elapsed = this.t - task.settle;
+    const elapsed = this.t - this.tStart;
     // On land, falling isn't moving: a tall creature that topples carries its
     // centre of mass forward about as far as it drops (H/2 for a stick of
     // height H). So the COM's drop below its height when measuring began
@@ -705,7 +825,7 @@ export class Sim {
     const task = this.task, T = this.T;
     if (task.kind === 'compete') {
       const cube = this.cubePos();
-      const d = this.creatures.map((c, i) => (c.valid && !this.failed[i] ? c.distanceTo(cube) : Infinity));
+      const d = this.creatures.map((c, i) => (c.valid && !this.failed[i] ? c.distanceTo(cube) - (this.scene.grip ? this.grip(c) : 0) : Infinity));
       if (d.length < 2) return [d[0] === Infinity ? 0 : 1];
       const [a, b] = d;
       // a blown-up simulation can't be blamed on one side: nobody scores
