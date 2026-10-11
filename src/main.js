@@ -52,7 +52,7 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
-  grip: 'scGrip', metric: 'scMetric', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize' };
+  grip: 'scGrip', metric: 'scMetric', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize' };
 function readScene() {
   const s = {};
   for (const [k, id] of Object.entries(SC_FIELDS)) {
@@ -209,11 +209,28 @@ function startReplay(r) {
 function restartSim() {
   for (const s of sims) s.free();
   sims = []; sim = null;
+  view.clear();
   if (!replay) return;
   const cells = replay.cells || [{ genome: replay.genome, opponent: replay.opponent }];
   sims = cells.map(c => new Sim(rtask(), c.opponent ? [c.genome, c.opponent] : [c.genome], { trial: replay.trial, phase: replay.phase || 0, scene: replay.scene }));
   sim = sims[0];
-  view.load(sims, replay.cells ? cells.map(c => ({ text: c.label, short: c.short, color: c.color })) : []);
+  // settling isn't shown: the frame loop runs it unseen, then shows the
+  // creatures as measuring starts
+  settleLabels = replay.cells ? cells.map(c => ({ text: c.label, short: c.short, color: c.color })) : [];
+  settled = false;
+}
+let settled = true, settleLabels = [];
+// run settling for up to `ms`; once every sim is measuring, load the view
+function settleSims(ms) {
+  const t0 = performance.now();
+  let busy = true;
+  while (busy && performance.now() - t0 < ms) {
+    busy = false;
+    for (const s of sims) if (s.settling && !s.done) { s.step(); busy = true; }
+  }
+  if (busy) return;
+  settled = true;
+  view.load(sims, settleLabels);
   if (replay.focus >= 0) view.focus_(replay.focus, true);
   pauseUntil = performance.now() + 400;
 }
@@ -662,8 +679,13 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   const allDone = () => sims.every(s => s.done);
-  if (sim && now <= pauseUntil && !allDone()) $('hudSub').textContent = hudText();
-  if (sim && now > pauseUntil) {
+  if (sim && !settled) {
+    settleSims(25);
+    if (!settled) $('hudSub').textContent = 'settling…';
+  }
+  const live = sim && settled;
+  if (live && now <= pauseUntil && !allDone()) $('hudSub').textContent = hudText();
+  if (live && now > pauseUntil) {
     acc += dt * +$('speed').value;
     let n = 0;
     slowed = false;
@@ -692,11 +714,11 @@ function frame(now) {
       $('hudSub').textContent = hudText();
     }
   }
-  if (sim) view.update();
+  if (live) view.update();
   $('hudTitle').textContent = replay ? `${TASKS[rtask()].label} · ${replay.label}${replay.cells?.[replay.focus] ? ' › ' + replay.cells[replay.focus].label : ''}` : TASKS[task].label;
   if (!replay) $('hudSub').textContent = 'Press Evolve to start a run.';
   view.render();
-  if (recorder.recording) {
+  if (recorder.recording && settled) {
     recorder.frame($('hudTitle').textContent, $('hudSub').textContent);
     const t = Math.floor(recorder.seconds);
     $('record').textContent = `■ Stop ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;

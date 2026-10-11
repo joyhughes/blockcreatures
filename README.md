@@ -35,10 +35,16 @@ use five defences, all of which are used here:
    further back." With a 45° plane, a point at height h starts at least h
    further back, which is as far as toppling carries it. A long, low crawler
    isn't pushed back at all.
-5. **Relax before placing**: contestants relax (rule 1) against their plane
-   and are kept touching it as they slump: on frictionless ground sliding
-   doesn't change how a body settles, so each glides back along the ground
-   as it topples and starts against the plane in its slumped posture.
+5. **Relax before placing**: on frictionless ground where a body is doesn't
+   change how it settles, so with **Settle apart** (default) each contestant
+   relaxes (rule 1) on its own, 50 m off to the side, where neither the ball
+   nor the other creature can touch it, and with its brain idle (its senses
+   would be from the wrong place); then it moves to its plane in its slumped
+   posture and its brain starts with the clock. Without Settle apart (older
+   runs) contestants relax beside the ball against their plane, sensing, and
+   are kept touching it as they slump.
+
+Replays don't show settling: they start when the clock does.
 
 Competition also has Sims' **control bonus**: "further decreasing the
 distance value ... when a creature is touching the cube on the side that

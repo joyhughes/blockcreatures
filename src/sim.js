@@ -67,21 +67,24 @@ export const TASKS = {
 //              ball's centre; 'surface' = from the nearest part, so any touch counts as 0
 //   settle     on land, before scoring: 'stable' (Sims) = no friction and no muscles until the
 //              centre of mass stops dropping; 'timed' = the task's fixed settle time, friction on
+//   apart      competition and cooperation, settle 'stable': each creature relaxes on its own,
+//              well clear of the ball and the other creature and with its brain idle, then
+//              moves into its start zone; false = relaxes in place against the zone, sensing
 //   goalDist   cooperation: the goal's centre, this far from the ball's start (m), away from the creatures
 //   goalSize   cooperation: the goal's radius; the ball is in when its centre is inside
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 0.6, grip: true,
-  settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'com',
+  settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'com', apart: true,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface' };
+export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false };
 // a task's default scene: SCENE with the task's own ball
 export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface' };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false };
   const legacy = TASKS[taskName].kind === 'cooperate' ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -90,6 +93,7 @@ export function sceneFor(taskName, scene) {
 const RELAX_STILL = 0.5;   // stable: the centre of mass hasn't dropped for this long (s)
 const RELAX_MIN = 0.3, RELAX_MAX = 5;   // ... but at least / at most this long
 const BALL_ROLL = 0.02;
+const APART = 50;   // settling apart: each creature this far to the side (m)
 const COOP_SPACING = 0.5;   // cooperation: gap between the two creatures at the start (m)    // rolling resistance of the ball: it rolls far, but stops
 
 const yawQuat = a => ({ x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) });
@@ -663,6 +667,13 @@ export class Sim {
       // the plane zone: placed against it as built, and kept against it
       // every step while relaxing (relaxStep)
       if (sc.zone === 'plane') this.placeInZone();
+      // settling apart: off to either side, so nothing about the ball or the
+      // other creature can shape how a body settles (frictionless ground:
+      // where it is doesn't matter); back into place when measuring starts
+      if (this.relaxing && sc.apart) {
+        this.apart = this.creatures.map((c, i) => (i ? APART : -APART));
+        this.creatures.forEach((c, i) => { if (c.valid) c.shift([0, 0, this.apart[i]]); });
+      }
     } else {
       this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land }));
     }
@@ -703,7 +714,7 @@ export class Sim {
     // on frictionless ground a horizontal shift doesn't change how a body
     // settles, so contestants glide along the plane as they topple rather
     // than jump to it at the end
-    if (this.cube && this.scene.zone === 'plane') this.placeInZone();
+    if (this.cube && this.scene.zone === 'plane' && !this.apart) this.placeInZone();
     let still = this.t >= RELAX_MIN;
     this.creatures.forEach((c, i) => {
       if (!c.valid || this.failed[i]) return;
@@ -715,6 +726,11 @@ export class Sim {
     const f = this.scene.friction;
     this.groundCol.setFriction(f);
     this.creatures.forEach(c => { if (c.valid) c.setFriction(f); });
+    if (this.apart) {
+      this.creatures.forEach((c, i) => { if (c.valid) c.shift([0, 0, -this.apart[i]]); });
+      if (this.scene.zone === 'plane') this.placeInZone();
+      this.apart = null;
+    }
     this.tStart = this.t;
     this.totalSteps = this.steps + Math.round(this.T / DT);
   }
@@ -735,9 +751,12 @@ export class Sim {
       // cooperation: the second photosensor sees the goal instead of the partner
       if (this.coop) other = this.goal;
       else if (task.pair && cs[1 - i] && cs[1 - i].valid) other = cs[1 - i].com();
-      c.sense(world, target, other);
-      brainStep(c.brain, DT / 2);
-      brainStep(c.brain, DT / 2);
+      c.sense(world, target, other);   // joint angles and rates too, for limits and damping
+      // settling apart, the brain waits: its senses are from the wrong place
+      if (!this.apart) {
+        brainStep(c.brain, DT / 2);
+        brainStep(c.brain, DT / 2);
+      }
       c.actuate(active);
       if (task.env === 'water') c.drag();
       else c.roll(this.g);
