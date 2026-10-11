@@ -72,19 +72,21 @@ export const TASKS = {
 //              moves into its start zone; false = relaxes in place against the zone, sensing
 //   goalDist   cooperation: the goal's centre, this far from the ball's start (m), away from the creatures
 //   goalSize   cooperation: the goal's radius; the ball is in when its centre is inside
+//   together   cooperation: the share of the score (0..1) given for the share of the measured time
+//              both creatures touch the ball at once
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 0.6, grip: true,
-  settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'com', apart: true,
+  settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'com', apart: true, together: 0.2,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false };
+export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0 };
 // a task's default scene: SCENE with the task's own ball
 export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0 };
   const legacy = TASKS[taskName].kind === 'cooperate' ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -658,6 +660,7 @@ export class Sim {
       if (coop) {
         this.goal = [sc.goalDist, 0, 0];
         this.scored = null;   // seconds into the measured time when the ball went in
+        this.playSteps = this.bothSteps = 0;   // measured steps, and those with both touching the ball
         this.creatures.forEach((c, i) => {
           if (!c.valid) return;
           const s = i ? 1 : -1;
@@ -774,6 +777,11 @@ export class Sim {
       if (this.tStart !== null && this.t >= this.tStart) this.trackStep(i);
     }
     if (this.tStart === null) this.relaxStep();
+    // cooperation: how long both touch the ball at once, until the game ends
+    if (this.coop && this.tStart !== null && this.t >= this.tStart && this.scored === null) {
+      this.playSteps++;
+      if (this.scene.together > 0 && cs.every((c, i) => c.valid && !this.failed[i] && this.touching(c))) this.bothSteps++;
+    }
     // cooperation: a goal ends the game
     if (this.coop && this.tStart !== null && this.t >= this.tStart && this.scored === null && this.ballToGoal() <= this.scene.goalSize) {
       this.scored = this.t - this.tStart;
@@ -803,13 +811,25 @@ export class Sim {
     const u = scale(u0, 1 / n);
     let best = 0;
     for (let i = 0; i < c.parts.length; i++) {
-      const p = c.closestPoint(i, ball), rel = sub(p, ball);
-      // touching: within 2 cm of the prize's surface
-      const touch = this.ballSphere ? len(rel) <= r + 0.02
-        : qrot(qconj(this.cube.rotation()), rel).every(x => Math.abs(x) <= r + 0.02);
-      if (touch) best = Math.max(best, dot(rel, u) / Math.max(len(rel), 1e-9));
+      const rel = this.touchPoint(c, i, ball);
+      if (rel) best = Math.max(best, dot(rel, u) / Math.max(len(rel), 1e-9));
     }
     return r * best;
+  }
+
+  // part i's closest point to the prize relative to its centre, if the part
+  // touches it: within 2 cm of its surface
+  touchPoint(c, i, ball = this.cubePos()) {
+    const r = this.ballR, rel = sub(c.closestPoint(i, ball), ball);
+    const touch = this.ballSphere ? len(rel) <= r + 0.02
+      : qrot(qconj(this.cube.rotation()), rel).every(x => Math.abs(x) <= r + 0.02);
+    return touch ? rel : null;
+  }
+
+  touching(c) {
+    const ball = this.cubePos();
+    for (let i = 0; i < c.parts.length; i++) if (this.touchPoint(c, i, ball)) return true;
+    return false;
   }
 
   // rolling resistance for the ball, as for creatures' round parts (Creature.roll)
@@ -881,16 +901,20 @@ export class Sim {
       // shared: 0.8 x the share of the way the ball got to the goal's edge,
       // plus 0.2 x the share of their distance to the ball the two closed on
       // average (so creatures that never touch it can still improve); on a
-      // goal, 1 + the share of the time left (1..2). A blown-up simulation
-      // scores nothing for either.
+      // goal, 1 + the share of the time left (1..2). Scene `together` takes
+      // its share from these for the time both touch the ball at once. A
+      // blown-up simulation scores nothing for either.
       const cs = this.creatures;
       if (cs.every(c => !c.valid) || cs.some((c, i) => c.valid && this.failed[i])) return cs.map(() => 0);
       const sc = this.scene;
       const clamp = x => Math.max(0, Math.min(1, x));
       const live = cs.map((c, i) => this.track[i]).filter((tr, i) => cs[i].valid && tr.start > 0);
       const near = live.reduce((t, tr) => t + clamp(1 - tr.last / tr.start), 0) / Math.max(1, live.length);
-      const f = this.scored !== null ? 1 + Math.max(0, 1 - this.scored / T)
-        : 0.8 * clamp((sc.goalDist - this.ballToGoal()) / Math.max(0.01, sc.goalDist - sc.goalSize)) + 0.2 * near;
+      // together: share w of the score for the share of the game both
+      // creatures spent touching the ball at once, taken from the rest
+      const w = clamp(sc.together || 0), both = this.bothSteps / Math.max(1, this.playSteps);
+      const f = this.scored !== null ? 1 + (1 - w) * Math.max(0, 1 - this.scored / T) + w * both
+        : (1 - w) * (0.8 * clamp((sc.goalDist - this.ballToGoal()) / Math.max(0.01, sc.goalDist - sc.goalSize)) + 0.2 * near) + w * both;
       return cs.map(() => f);
     }
     if (task.kind === 'compete') {

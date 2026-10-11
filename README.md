@@ -203,6 +203,13 @@ edge and 0.2 is how much of the distance to the ball the two closed. Without
 that last part, random creatures that never touch the ball all score 0 and
 evolution has nothing to climb.
 
+**Together bonus** (default 0.2) rewards teamwork directly: that share of the
+score goes to the share of the game (until a goal or the end) that both
+creatures spend touching the ball at once, and the parts above are shrunk to
+make room: (1 − w) of them plus w × time together. A goal still scores at
+least 1 and no goal at most 1. The HUD shows `both on it` as a percentage.
+Runs from before this setting have it at 0.
+
 They sense the ball with the photosensor that follows the light or the
 prize. In cooperation the second photosensor, which otherwise points at the
 opponent, points at the goal, so each creature knows where to push. The start

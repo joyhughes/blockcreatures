@@ -166,6 +166,7 @@
   <div class="row" data-kind="cooperate" style="margin-top:8px">
     <label title="How far the goal's centre is from the ball's start, straight ahead of the two creatures">Goal distance <input type="number" id="scGoalDist" min="0.5" max="30" step="0.5"> m</label>
     <label title="The goal's radius: the ball is in when its centre is inside the circle">Goal size <input type="number" id="scGoalSize" min="0.1" max="5" step="0.1"> m</label>
+    <label title="Share of the score for teamwork: the share of the game both creatures spend touching the ball at once. The rest of the score is shrunk to make room, so a goal still beats no goal. 0 = off">Together bonus <input type="number" id="scTogether" min="0" max="1" step="0.05"></label>
   </div>
   <div class="row" data-kind="compete cooperate" style="margin-top:8px">
     <label title="What the two creatures compete for: a ball rolls, so it can be pushed and dribbled; the cube of Sims' paper slides">Prize <select id="scBall"><option value="sphere">ball</option><option value="cube">cube</option></select></label>
