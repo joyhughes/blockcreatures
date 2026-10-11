@@ -5,7 +5,7 @@ import { initPhysics, Sim, PHYS } from '../src/sim.js';
 await initPhysics();
 const run = JSON.parse(readFileSync(process.argv[2]));
 const h = run.history[process.argv[3] ? +process.argv[3] : run.history.length - 1];
-const sim = new Sim(run.task, [h.genome], { phase: h.phase });
+const sim = new Sim(run.task, [h.genome], { phase: h.phase, scene: h.scene ?? run.scene });
 const c = sim.creatures[0];
 const g = sim.task.env === 'land' ? 9.81 : 0;
 // full mechanical energy: translation + rotation (world inertia from Rapier) + gravity

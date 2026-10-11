@@ -4,7 +4,7 @@ await initPhysics();
 const run = JSON.parse(readFileSync(process.argv[2]));
 const h = run.history[run.history.length - 1];
 for (let trial = 0; trial < TASKS[run.task].trials; trial++) {
-  const sim = new Sim(run.task, h.opponent ? [h.genome, h.opponent] : [h.genome], { phase: h.phase, trial });
+  const sim = new Sim(run.task, h.opponent ? [h.genome, h.opponent] : [h.genome], { phase: h.phase, trial, scene: h.scene ?? run.scene });
   const c = sim.creatures[0];
   const out = [];
   while (!sim.done) {

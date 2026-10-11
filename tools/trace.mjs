@@ -3,7 +3,7 @@ import { initPhysics, Sim } from '../src/sim.js';
 await initPhysics();
 const run = JSON.parse(readFileSync(process.argv[2]));
 const h = run.history[run.history.length - 1];
-const sim = new Sim(run.task, [h.genome], { phase: h.phase });
+const sim = new Sim(run.task, [h.genome], { phase: h.phase, scene: h.scene ?? run.scene });
 const c = sim.creatures[0];
 const E = () => c.bodies.reduce((s, b, i) => s + 0.5 * c.mass[i] * (c.bv[i][0] ** 2 + c.bv[i][1] ** 2 + c.bv[i][2] ** 2) + c.mass[i] * 9.81 * c.bc[i][1], 0);
 const E0 = E(); let prevEx = 0;

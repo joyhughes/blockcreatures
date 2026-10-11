@@ -5,7 +5,7 @@ await initPhysics();
 const run = JSON.parse(readFileSync(process.argv[2]));
 const h = run.history[process.argv[3] ? +process.argv[3] : run.history.length - 1];
 const g = h.genome;
-const sim = new Sim(run.task, h.opponent ? [g, h.opponent] : [g], { phase: h.phase });
+const sim = new Sim(run.task, h.opponent ? [g, h.opponent] : [g], { phase: h.phase, scene: h.scene ?? run.scene });
 const c = sim.creatures[0];
 console.log('gen', h.gen, 'best', h.best, 'parts', c.parts.length, 'bodies', c.nb);
 c.parts.forEach(p => console.log(' part', p.index, 'node', p.node, 'joint', p.joint, 'shape', p.shape, 'phase', p.phase, 'half', p.half.map(x => x.toFixed(2)).join(','), 'parent', p.parent));

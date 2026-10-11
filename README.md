@@ -265,26 +265,30 @@ headless runner: `node tools/evolve.mjs walk 150 300 1 bilateral round` (plan
 
 ## Bundled champions
 
-Evolved headlessly at population 300, single population (`tools/batch.sh`
-re-evolves them all, about an hour). Raising the size limits for long arms
-changed which mutants are viable, so re-running it now evolves different
-champions. Scores below are under the current fitness measures (see
-"Falling isn't moving"). The saved ones still replay exactly (`tools/regress.mjs`). Every one passes the energy audit (≤ 0.45 J/kg).
+Evolved headlessly at population 300. The water champions evolved in a
+single population (`tools/batch.sh`) and replay in the original scene. The
+land champions were re-evolved under Sims' rules against falling over
+(relaxed settling; in competition the diagonal start zone and wrap bonus),
+with 6 islands, novelty 0.3 and 25% structural mutations
+(`node tools/evolve.mjs <task> 150 300 7 [plan] [round]`, then
+`tools/champion.mjs`). Every one replays exactly (`tools/regress.mjs`) and
+passes the energy audit: peak unexplained energy ≤ 0.13 J/kg, except the
+radial jumper's 0.71 J/kg (most of it on landing; at most 4 cm of its height).
 
 | Target | Body plan | Generations | Result |
 |---|---|---|---|
 | Swimming | free | 150 | 0.68 m/s |
-| Walking | free | 150 | 1.77 m/s |
-| Jumping | free | 150 | lowest part 0.64 m up |
+| Walking | free | 150 | 1.51 m/s |
+| Jumping | free | 150 | lowest part 1.24 m up: two 1 m blocks on a hinge that fling themselves clear of the ground |
 | Following (water) | free | 300 | 0.12–0.39 m/s closing, from all 8 test directions |
-| Following (land) | free | 300 | 0.02–0.18 m/s closing from all 8 directions (re-evolved after the fall fix; straight-line motion would average ≈ 0) |
-| Competition | free, 6 islands, ball scene | 150 | 1.49 average against the bests of every 10th generation (0.90 in a close race with the previous best); both contestants walk from 2.7 m to within 0.7 m of the ball in 10 s |
+| Following (land) | free | 150 | 0.17–0.45 m/s closing from 7 of 8 directions (−0.08 from the eighth); chosen as the most robust of the last 20 generation bests, none of which may trip the energy audit in any of 24 runs |
+| Competition | free, ball scene | 150 | 1.51 average in a round robin of every 10th generation's best; shown beating the next strongest 1.78 to 0.22 |
 | Swimming | radial ×5, round | 150 | 0.74 m/s |
 | Swimming | bilateral, round | 150 | 0.63 m/s |
 | Swimming | radial ×6, from the tentacle example | 150 | 0.67 m/s |
-| Walking | radial ×5, round | 150 | 0.59 m/s |
-| Walking | bilateral, round | 150 | 2.69 m/s |
-| Jumping | radial ×4, round | 150 | 1.41 m |
+| Walking | radial ×5, round | 150 | 0.89 m/s |
+| Walking | bilateral, round | 150 + 60 | 2.71 m/s: the earlier champion (2.69 m/s, 1.33 under the new rules) re-adapted for 60 generations; a fresh 150-generation run reached only 1.04 |
+| Jumping | radial ×4, round | 150 | 0.78 m |
 | Following (water) | bilateral, round | 100 | 0.12–0.20 m/s from all 8 directions |
 
 Choosing a body plan shows the champion of exactly that target and plan,

@@ -6,7 +6,7 @@ await initPhysics();
 const c = JSON.parse(readFileSync(process.argv[2]));
 const out = [];
 for (let k = 0; k < 8; k++) {
-  const sim = new Sim(c.task, [c.genome], { trial: 0, phase: k * Math.PI / 4 - Math.PI / 3 });
+  const sim = new Sim(c.task, [c.genome], { trial: 0, phase: k * Math.PI / 4 - Math.PI / 3, scene: c.scene });
   while (!sim.done) sim.step();
   out.push(sim.fitness()[0]);
   sim.free();

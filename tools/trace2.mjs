@@ -5,7 +5,7 @@ import { initPhysics, Sim, PHYS } from '../src/sim.js';
 await initPhysics();
 const run = JSON.parse(readFileSync(process.argv[2]));
 const h = run.history[run.history.length - 1];
-const sim = new Sim(run.task, [h.genome], { phase: h.phase });
+const sim = new Sim(run.task, [h.genome], { phase: h.phase, scene: h.scene ?? run.scene });
 const c = sim.creatures[0];
 const g = sim.task.env === 'land' ? 9.81 : 0;
 const rot = (b, w) => { const M = b.effectiveAngularInertia(); return 0.5 * (w[0] * (M.m11 * w[0] + M.m12 * w[1] + M.m13 * w[2]) + w[1] * (M.m12 * w[0] + M.m22 * w[1] + M.m23 * w[2]) + w[2] * (M.m13 * w[0] + M.m23 * w[1] + M.m33 * w[2])); };
