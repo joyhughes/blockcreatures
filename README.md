@@ -202,22 +202,23 @@ headless runner: `node tools/evolve.mjs walk 150 300 1 bilateral round` (plan
 Evolved headlessly at population 300, single population (`tools/batch.sh`
 re-evolves them all, about an hour). Raising the size limits for long arms
 changed which mutants are viable, so re-running it now evolves different
-champions. The saved ones still replay exactly (`tools/regress.mjs`). Every one passes the energy audit (≤ 0.45 J/kg).
+champions. Scores below are under the current fitness measures (see
+"Falling isn't moving"). The saved ones still replay exactly (`tools/regress.mjs`). Every one passes the energy audit (≤ 0.45 J/kg).
 
 | Target | Body plan | Generations | Result |
 |---|---|---|---|
 | Swimming | free | 150 | 0.68 m/s |
-| Walking | free | 150 | 1.80 m/s |
+| Walking | free | 150 | 1.77 m/s |
 | Jumping | free | 150 | lowest part 0.64 m up |
 | Following (water) | free | 300 | 0.12–0.39 m/s closing, from all 8 test directions |
-| Following (land) | free | 300 | 0.00–0.24 m/s from 8 directions: slow, but it steers (straight-line motion would average ≈ 0) |
+| Following (land) | free | 300 | 0.02–0.18 m/s closing from all 8 directions (re-evolved after the fall fix; straight-line motion would average ≈ 0) |
 | Competition | free | 150 | 1.12 against the previous generation's best |
 | Swimming | radial ×5, round | 150 | 0.74 m/s |
 | Swimming | bilateral, round | 150 | 0.63 m/s |
 | Swimming | radial ×6, from the tentacle example | 150 | 0.67 m/s |
-| Walking | radial ×5, round | 150 | 0.60 m/s |
+| Walking | radial ×5, round | 150 | 0.59 m/s |
 | Walking | bilateral, round | 150 | 2.69 m/s |
-| Jumping | radial ×4, round | 150 | 1.43 m |
+| Jumping | radial ×4, round | 150 | 1.41 m |
 | Following (water) | bilateral, round | 100 | 0.12–0.20 m/s from all 8 directions |
 
 Choosing a body plan shows the champion of exactly that target and plan,
@@ -290,7 +291,8 @@ position and chain position.
   distance (walking, following), and from the final-third distance using the
   drop within that third. A walker's centre of mass bobs but doesn't fall, so
   the walking champion lost under 2% (1.80 → 1.77 m/s). The old land-following
-  champion fell to −0.01: it had been toppling toward the light. Jumping
+  champion fell to −0.01: it had been toppling toward the light. It was
+  re-evolved under the new measure and now walks toward it. Jumping
   counts the lowest part's height only as far as the centre of mass has also
   risen: a toppling body swings its grounded parts up while its centre of
   mass falls. Real jumpers keep their scores (0.64 m; 1.43 → 1.41 m).
