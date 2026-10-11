@@ -1,4 +1,4 @@
-import { initPhysics, Sim, TASKS, DT } from './sim.js';
+import { initPhysics, Sim, TASKS, DT, SCENE, sceneFor } from './sim.js';
 import { Evolver } from './evolve.js';
 import { Pool } from './pool.js';
 import { View } from './view.js';
@@ -45,6 +45,56 @@ function setTask(key) {
   switchRun();
 }
 
+// ---------------------------------------------------------------- scene
+// Each run has its own scene (sim.js SCENE): lifespan, gravity, the
+// competition's prize and start distance... Changing it mid-run re-scores
+// everyone from the next generation, and the creature on screen replays in
+// the new scene straight away.
+const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', lightDist: 'scLightDist',
+  ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', gapBody: 'scGapBody', maxVolume: 'scMaxVolume' };
+function readScene() {
+  const s = {};
+  for (const [k, id] of Object.entries(SC_FIELDS)) {
+    const el = $(id);
+    if (el.type === 'checkbox') s[k] = el.checked;
+    else if (el.tagName === 'SELECT') s[k] = el.value;
+    else s[k] = el.value === '' || !isFinite(+el.value) ? SCENE[k] : +el.value;
+  }
+  return s;
+}
+function writeScene(s) {
+  const full = sceneFor(task, s);   // null: the legacy scene
+  for (const [k, id] of Object.entries(SC_FIELDS)) {
+    const el = $(id);
+    if (el.type === 'checkbox') el.checked = !!full[k];
+    else if (k === 'duration') el.value = s?.duration ?? '';
+    else el.value = String(full[k]);
+  }
+  showScene();
+}
+function showScene() {
+  const t = TASKS[task];
+  $('scDuration').placeholder = String(t.duration);
+  for (const el of document.querySelectorAll('[data-env]')) el.hidden = el.dataset.env !== t.env;
+  for (const el of document.querySelectorAll('[data-kind]')) el.hidden = el.dataset.kind !== t.kind;
+  const s = evolver?.scene;
+  $('sceneNote').textContent = !s ? 'This run uses the original scene (a 0.8 m cube 1.5 m away in competition).'
+    : evolver.sceneGen > 0 ? `Scene changed at generation ${evolver.sceneGen}; fitness before and after isn't comparable.` : '';
+}
+function sceneChanged() {
+  evolver.scene = readScene();
+  if (evolver.history.length) { evolver.rescore = true; evolver.sceneGen = evolver.gen; }
+  showScene();
+  if (replay) {
+    // its recorded score was in another scene
+    if (!replay.rescened) replay.label = replay.label.replace(', in the original cube scene', '') + ', in the scene set here';
+    replay.rescened = true; replay.fitness = undefined;
+    replay.scene = evolver.scene; restartSim();
+  }
+}
+for (const id of Object.values(SC_FIELDS)) $(id).onchange = sceneChanged;
+$('scReset').onclick = () => { writeScene(SCENE); sceneChanged(); };
+
 // ---------------------------------------------------------------- body plan
 let planType = 'free';
 const PLAN_NOTES = {
@@ -78,8 +128,10 @@ function newRun() {
     task, popSize: +$('pop').value, seed: +$('seed').value,
     evaluate: jobs => pool.run(jobs), body: body(), islands: +$('islands').value,
     novelty: +$('novelty').value, structural: +$('structural').value, migrate: +$('migrate').value,
+    scene: readScene(),
   });
   runs.set(runKey(), evolver);
+  showScene();
   selected = -1; pendingGen = -1;
   $('gens').innerHTML = '';
   refresh();
@@ -91,6 +143,7 @@ function switchRun() {
   $('pop').value = r.popSize;
   $('islands').value = String(r.islands);
   $('novelty').value = String(r.novelty); $('structural').value = String(r.structural); $('migrate').value = String(r.migrate);
+  writeScene(r.scene);
   selected = -1; pendingGen = -1;
   $('gens').innerHTML = '';
   refresh();
@@ -113,8 +166,9 @@ async function evolveLoop() {
     $('sRate').textContent = (evalCount / secs).toFixed(0);
     // watching latest: switch once the current replay has played out
     if ($('follow').checked) {
-      if (!replay || replay.gen === undefined) showGen(h.gen, false);
-      else pendingGen = h.gen;
+      const g = $('show').value === 'ever' ? bestGen() : h.gen;
+      if (!replay || replay.gen === undefined) showGen(g, false);
+      else pendingGen = g;
     }
     refresh();
   }
@@ -145,7 +199,7 @@ function restartSim() {
   sims = []; sim = null;
   if (!replay) return;
   const cells = replay.cells || [{ genome: replay.genome, opponent: replay.opponent }];
-  sims = cells.map(c => new Sim(rtask(), c.opponent ? [c.genome, c.opponent] : [c.genome], { trial: replay.trial, phase: replay.phase || 0 }));
+  sims = cells.map(c => new Sim(rtask(), c.opponent ? [c.genome, c.opponent] : [c.genome], { trial: replay.trial, phase: replay.phase || 0, scene: replay.scene }));
   sim = sims[0];
   view.load(sims, replay.cells ? cells.map(c => ({ text: c.label, short: c.short, color: c.color })) : []);
   if (replay.focus >= 0) view.focus_(replay.focus, true);
@@ -187,8 +241,21 @@ async function stopRecording() {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
-// What a generation's replay shows, by the Show menu: its best, each island's
-// best side by side, or (latest generation only) the top 25 or everyone.
+// generation with the highest best score of the run (for Show: Best so far).
+// In following and competition everyone is re-scored each generation under
+// new conditions, so a generation's best can score below an earlier one.
+function bestGen() {
+  const H = evolver.history;
+  let g = 0;
+  H.forEach((h, k) => { if (h.best > H[g].best) g = k; });
+  return g;
+}
+// which island holds a generation's best
+const topIsland = h => (h.islands && h.islands.length > 1 ? h.islands.indexOf(Math.max(...h.islands)) : -1);
+
+// What a generation's replay shows, by the Show menu: its best (or the run's
+// best so far), each island's best side by side, or (latest generation only)
+// the top 25 or everyone.
 function showGen(gen, user = true) {
   const h = evolver.history[gen];
   if (!h) return;
@@ -196,14 +263,16 @@ function showGen(gen, user = true) {
   selected = gen;
   if (user) $('follow').checked = gen === evolver.history.length - 1;
   const mode = $('show').value;
-  const r = { genome: h.genome, opponent: h.opponent, phase: h.phase, gen, show: mode, label: `generation ${gen} best`, fitness: h.best };
+  const ti = topIsland(h);
+  const r = { genome: h.genome, opponent: h.opponent, phase: h.phase, scene: h.scene, gen, show: mode, fitness: h.best,
+    label: (mode === 'ever' ? `best so far: generation ${gen}` : `generation ${gen} best`) + (ti >= 0 ? ` (island ${ti + 1})` : '') };
   const lp = evolver.lastPop;
   if ((mode === 'top' || mode === 'all') && lp && lp.gen === gen) {
     const m = mode === 'top' ? lp.members.slice(0, 25) : lp.members;
     r.cells = m.map((p, i) => ({ genome: p.g, opponent: lp.opponent, label: `#${i + 1}${evolver.islands > 1 ? ' · island ' + (p.isl + 1) : ''} · ${p.fit.toFixed(3)}`, short: p.fit.toFixed(3), color: COLORS[(p.isl || 0) % COLORS.length] }));
-    r.phase = lp.phase;
+    r.phase = lp.phase; r.scene = lp.scene;
     r.label = mode === 'top' ? `generation ${gen}, top ${m.length}` : `generation ${gen}, all ${m.length} creatures`;
-  } else if (mode !== 'best' && h.islandGenomes) {
+  } else if (mode !== 'best' && mode !== 'ever' && h.islandGenomes) {
     r.cells = h.islandGenomes.map((g, k) => ({ genome: g, opponent: h.opponent, label: `island ${k + 1} · ${h.islands[k].toFixed(3)}`, color: COLORS[k % COLORS.length] }));
     r.label = `generation ${gen}, best of each island` + (mode !== 'islands' ? ' (the whole population is kept only for the latest generation)' : '');
   }
@@ -211,6 +280,7 @@ function showGen(gen, user = true) {
   startReplay(r);
   drawGraph(h.genome);
   markGens();
+  drawIslands();
 }
 $('labels').onchange = () => view.setLabels($('labels').checked);
 
@@ -233,7 +303,8 @@ $('show').onchange = () => {
   if (latest < 0) return;
   // the whole population is kept only for the latest generation
   const m = $('show').value;
-  showGen((m === 'top' || m === 'all' || $('follow').checked || selected < 0) ? latest : selected);
+  if (m === 'ever') showGen(bestGen());
+  else showGen((m === 'top' || m === 'all' || $('follow').checked || selected < 0) ? latest : selected);
 };
 
 // Mate the islands' best creatures with each other (see Evolver.mateIslands),
@@ -257,7 +328,7 @@ $('mate').onclick = async () => {
   $('follow').checked = false;
   markGens();
   const shown = kids.slice(0, 25);
-  startReplay({
+  startReplay({ scene: h.scene,
     genome: shown[0].g, opponent: h.opponent, phase: h.phase, label: `hybrids of the island bests, generation ${h.gen}`,
     cells: shown.map(k => ({ genome: k.g, opponent: h.opponent, label: `${k.a + 1}×${k.b + 1} ${k.op === 'crossover' ? 'cross' : 'graft'} · ${k.fit.toFixed(3)}`, color: COLORS[k.a % COLORS.length] })),
   });
@@ -296,7 +367,7 @@ async function loadChampion() {
       if (e) $('follow').checked = false;
       const gp = c.genome.plan, round = c.genome.nodes.some(nd => nd.shape && nd.shape !== 'box');
       const plan = gp ? ` ${gp.type}${gp.n ? ' ×' + gp.n : ''}${round ? ', round parts' : ''}` : '';
-      startReplay({ genome: c.genome, opponent: c.opponent, phase: c.phase, label: `champion${plan} (${c.generations} generations)`, fitness: c.fitness });
+      startReplay({ genome: c.genome, opponent: c.opponent, phase: c.phase, scene: c.scene, label: `champion${plan} (${c.generations} generations)` + (c.scene ? '' : sceneFor(task).ball === 'cube' && TASKS[task].kind === 'compete' ? ', in the original cube scene' : ''), fitness: c.fitness });
       drawGraph(c.genome);
       markGens();
     };
@@ -308,7 +379,7 @@ async function loadChampion() {
     const g = new Evolver({ task, seed: +$('seed').value, body: b }).randomViable();
     const plan = `${b.plan.type}${b.plan.n ? ' ×' + b.plan.n : ''}${b.round ? ', round parts' : ''}${b.minArm ? `, arms ≥ ${b.minArm}` : ''}`;
     $('follow').checked = true;
-    startReplay({ genome: g, label: `random ${plan} creature, unevolved: press Evolve` });
+    startReplay({ genome: g, scene: evolver.scene, label: `random ${plan} creature, unevolved: press Evolve` });
     drawGraph(g);
   }
 }
@@ -341,8 +412,13 @@ function diversityText(h) {
     + `islands ${h.islandSpread?.toFixed(3) ?? '–'} apart. ${h.founders} of the ${evolver.popSize} founding lineages survive.`;
 }
 
+// The chips show the generation being replayed (with Watch latest on, the
+// replay finishes playing before it moves to a newer generation), or the
+// latest. The island holding that generation's best is outlined.
 function drawIslands() {
-  const H = evolver.history, h = H[H.length - 1];
+  const H = evolver.history, h = H[replay?.gen ?? -1] || H[H.length - 1];
+  $('islandGen').textContent = h ? `generation ${h.gen}` : '';
+  const ti = h ? topIsland(h) : -1;
   $('islandBox').hidden = evolver.islands < 2;
   $('mate').disabled = !h;
   const list = $('islandList');
@@ -352,11 +428,12 @@ function drawIslands() {
     const d = document.createElement('div');
     const f = h?.islands?.[k];
     d.innerHTML = `<i style="background:${COLORS[k % COLORS.length]}"></i>${k + 1} <span>${f === undefined ? '–' : f.toFixed(3)}</span>`;
-    d.title = 'Watch the best creature of this island';
+    d.title = 'Watch the best creature of this island' + (k === ti ? ' (the best of this generation)' : '');
+    if (k === ti) d.className = 'top';
     d.onclick = () => {
       if (!h?.islandGenomes) return;
       selected = -1; $('follow').checked = false; markGens();
-      startReplay({ genome: h.islandGenomes[k], opponent: h.opponent, phase: h.phase, label: `island ${k + 1} best, generation ${h.gen}`, fitness: h.islands[k] });
+      startReplay({ genome: h.islandGenomes[k], opponent: h.opponent, phase: h.phase, scene: h.scene, label: `island ${k + 1} best, generation ${h.gen}`, fitness: h.islands[k] });
       drawGraph(h.islandGenomes[k]);
     };
     list.append(d);
@@ -469,7 +546,7 @@ $('examples').onchange = async e => {
   selected = -1;
   $('follow').checked = false;
   const label = (c.label || 'example').replace(`${TASKS[c.task].label} · `, '');
-  startReplay({ genome: c.genome, opponent: c.opponent, phase: c.phase, task: c.task, label, fitness: c.fitness });
+  startReplay({ genome: c.genome, opponent: c.opponent, phase: c.phase, scene: c.scene, task: c.task, label, fitness: c.fitness });
   drawGraph(c.genome);
   markGens();
 };
@@ -508,6 +585,7 @@ $('save').onclick = () => {
     task, seed: evolver.rng && +$('seed').value, popSize: evolver.popSize, gen: evolver.gen,
     history: evolver.history, pop: evolver.pop.map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder })), opponent: evolver.opponent,
     body: evolver.body, islands: evolver.islands, novelty: evolver.novelty, structural: evolver.structural, migrate: evolver.migrate,
+    scene: evolver.scene,
   }));
 };
 
@@ -531,6 +609,8 @@ $('load').onchange = async e => {
   $('novelty').value = String(d.novelty ?? 0); $('structural').value = String(d.structural ?? 0); $('migrate').value = String(d.migrate ?? 10);
   showPlan();
   newRun();
+  evolver.scene = d.scene ?? null;   // saves from before scenes: the legacy scene
+  writeScene(evolver.scene);
   evolver.rng = makeRng((d.seed || 1) * 7919 + (d.gen || 0));
   evolver.history = d.history || [];
   evolver.gen = d.gen ?? evolver.history.length;
@@ -592,7 +672,7 @@ function frame(now) {
 
 function hudText(finalFit) {
   const T = TASKS[rtask()];
-  let s = `t = ${Math.max(0, sim.t - T.settle).toFixed(1)} / ${T.duration}s`;
+  let s = `t = ${Math.max(0, sim.t - T.settle).toFixed(1)} / ${sim.T}s`;
   if (sim.t < T.settle) s = `settling ${sim.t.toFixed(1)}s`;
   if (T.trials > 1) s += ` · trial ${replay.trial + 1}/${T.trials}`;
   if (finalFit !== undefined) s += ` · this trial ${finalFit.toFixed(3)} ${UNITS[T.kind]}`;
@@ -604,6 +684,7 @@ function hudText(finalFit) {
 }
 
 showPlan();
+writeScene(SCENE);
 setTask('swim');
 requestAnimationFrame(frame);
 window.bc = { get evolver() { return evolver; }, get sim() { return sim; }, view, pool };

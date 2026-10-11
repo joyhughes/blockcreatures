@@ -11,7 +11,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Walking | land: gravity, ground friction | same, horizontal, measured after a 1.5 s settling period so falling over doesn't count |
 | Jumping | land | maximum height reached by the *lowest* part of the creature |
 | Following (water / land) | either | closing speed toward a light source, averaged over 3 trials with the light in different directions; per-block photosensors |
-| Competition | land, two creatures, a cube between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the cube; each creature competes against the previous generation's best ("all vs. best"); sizes normalized to equal total volume |
+| Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball; each creature competes against the previous generation's best ("all vs. best"); sizes capped at equal volume |
 
 ## Body plans and round parts (beyond Sims)
 
@@ -130,10 +130,15 @@ headless runs; 0, 0 and Islands 1 reproduce Sims' scheme.
   follow it. It becomes the creature on screen for the genotype graph,
   **Evolve from this** and **Record**. Click empty space or press Esc to zoom
   back out.
-- The **Islands** panel shows each island's best fitness; click one to watch
-  it. The fitness chart draws each island's best as a thin line.
+- The **Islands** panel shows each island's best fitness for the generation
+  being replayed (with **Watch latest** on, a replay plays to the end before
+  moving to a newer generation). The island holding that generation's best is
+  outlined. Click one to watch it. The fitness chart draws each island's best
+  as a thin line.
 - **Show** (next to Record) picks what a generation's replay shows: its
-  *Best*, the *Island bests* side by side with labels, or the latest generation's
+  *Best*, the run's *Best so far* (the highest-scoring generation best; in
+  following and competition everyone is re-scored under new conditions every
+  generation, so a generation's best can score below an earlier one), the *Island bests* side by side with labels, or the latest generation's
   *Top 25* or *Whole population*. Each creature runs in its own physics world,
   offset only in the picture. Big crowds play slower than real time. Labels
   shrink with distance in crowds of more than 9; past 25 they show only the
@@ -143,6 +148,28 @@ headless runs; 0, 0 and Islands 1 reproduce Sims' scheme.
   It scores the hybrids under the latest generation's conditions and shows
   the top 25 labelled like `2×5 cross · 0.84`. The best two per island replace
   that island's newest children, and selection decides whether they last.
+
+## Scene
+
+The **Scene** panel sets the world a run is scored in:
+
+- **Lifespan**: seconds each creature is scored for, after settling (blank =
+  the target's default).
+- **Gravity** and **Friction** on land; **Viscosity** in water.
+- **Light distance** for following.
+- Competition: the **Prize**, a ball (default) or Sims' cube, with its
+  **Size** and **Mass**. The ball rolls, with a little rolling resistance, so
+  creatures can push and dribble it. **Start distance** puts each contestant's
+  near side that far from the prize. **+ body length** adds each contestant's
+  own longest dimension, so a tall body can't win by toppling onto the prize.
+  **Size cap** scales bigger contestants down to that volume.
+
+The scene belongs to the run: it is saved with it, recorded in each
+generation's history, and used when that generation is replayed. Changing it
+mid-run re-scores everyone from the next generation (the note says from which
+generation scores aren't comparable), and replays the creature on screen in
+the new scene straight away. Creatures saved before scenes existed replay in
+the scene they evolved in (a 0.8 m cube 1.5 m away).
 
 **Examples ▸** replays example creatures, including hand-built tentacles.
 **Evolve from this** starts a new run seeded with mutants of whatever creature
@@ -191,7 +218,9 @@ node tools/cdp.mjs <url> out.png [waitMs] [js]                 # headless Chrome
 ```
 
 Tasks: `swim walk jump followWater followLand compete`. Env: `ISLANDS=K`
-(default 6; 1 = single population), `MIN_ARM=k`, `SEED_FROM=file`; e.g.
+(default 6; 1 = single population), `MIN_ARM=k`, `SEED_FROM=file`,
+`SCENE='{"gap":4,"duration":15}'` (scene overrides, see `SCENE` in `src/sim.js`),
+`LEGACY=1` (the old cube scene); e.g.
 `MIN_ARM=4 node tools/evolve.mjs swim 150 300 1 radial8 round`. Body plans for the
 headless runner: `node tools/evolve.mjs walk 150 300 1 bilateral round` (plan
 `free | bilateral | radialN`, then `round` to allow capsules and spheres;

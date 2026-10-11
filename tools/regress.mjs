@@ -6,7 +6,7 @@ await initPhysics();
 const out = {};
 for (const t of Object.keys(TASKS)) {
   const c = JSON.parse(readFileSync(`champions/${t}.json`));
-  out[t] = evaluate(t, c.opponent ? [c.genome, c.opponent] : [c.genome], { phase: c.phase })[0];
+  out[t] = evaluate(t, c.opponent ? [c.genome, c.opponent] : [c.genome], { phase: c.phase, scene: c.scene })[0];
 }
 const file = 'runs/baseline.json';
 if (process.argv[2] === 'save' || !existsSync(file)) writeFileSync(file, JSON.stringify(out));

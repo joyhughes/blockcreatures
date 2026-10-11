@@ -75,8 +75,19 @@ export class View {
     sprite.scale.set(2.2, 2.2, 1);
     this.light.add(sprite);
     this.scene.add(this.light);
-    this.cube = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8),
-      new THREE.MeshStandardMaterial({ color: 0x2b9b4a, roughness: 0.5 }));
+    // competition: a cube, or a ball painted in segments so its rolling shows;
+    // unit-size meshes scaled to the scene's ball size
+    this.cubeGeo = new THREE.BoxGeometry(2, 2, 2);
+    this.cubeMat = new THREE.MeshStandardMaterial({ color: 0x2b9b4a, roughness: 0.5 });
+    this.ballGeo = new THREE.SphereGeometry(1, 32, 24);
+    const bc = document.createElement('canvas');
+    bc.width = 256; bc.height = 128;
+    const bg = bc.getContext('2d');
+    ['#2b9b4a', '#f2efe6', '#2b9b4a', '#f2efe6', '#2b9b4a', '#f2efe6'].forEach((c, i) => { bg.fillStyle = c; bg.fillRect(i * 256 / 6, 0, 256 / 6 + 1, 128); });
+    const bt = new THREE.CanvasTexture(bc);
+    bt.colorSpace = THREE.SRGBColorSpace;
+    this.ballMat = new THREE.MeshStandardMaterial({ map: bt, roughness: 0.45 });
+    this.cube = new THREE.Mesh(this.cubeGeo, this.cubeMat);
     this.cube.castShadow = true;
     this.scene.add(this.cube);
 
@@ -135,7 +146,10 @@ export class View {
     // grid spacing from the largest creature
     const sizeOf = sim => { const c = sim.creatures.find(c => c.valid); return c ? Math.max(...c.parts.map(p => Math.hypot(...p.center) + Math.max(...p.half))) : 1; };
     const big = Math.max(...sims.map(sizeOf));
-    const gap = sims[0].cube ? 9 : Math.max(3, 2.6 * big);
+    // competition: room for both contestants at their start distance
+    const sc = sims[0].scene;
+    this.arena = sims[0].cube ? 2 * (sc.gap + (sc.gapBody ? 2 * big : big)) : 0;
+    const gap = sims[0].cube ? Math.max(9, this.arena + 3) : Math.max(3, 2.6 * big);
     const cols = Math.ceil(Math.sqrt(sims.length));
     this.gridSize = gap * cols;
     sims.forEach((sim, k) => {
@@ -151,6 +165,9 @@ export class View {
       if (sim.cube) {
         if (k === 0) { cell.cube = this.cube; this.cube.visible = true; }
         else { cell.cube = this.cube.clone(); this.add(cell.cube); }
+        cell.cube.geometry = sim.ballSphere ? this.ballGeo : this.cubeGeo;
+        cell.cube.material = sim.ballSphere ? this.ballMat : this.cubeMat;
+        cell.cube.scale.setScalar(sim.ballR);
       }
       // Labels: in small crowds, a fixed size on screen; in bigger ones they
       // shrink with distance like the creatures do, and past 25 show only
@@ -175,7 +192,7 @@ export class View {
       this.focus.copy(goal);
       this.controls.target.copy(this.focus);
       const sim = sims[0];
-      const d = crowd ? Math.max(6, 0.9 * this.gridSize + 2 * big) : sim.cube ? 8 : Math.max(4, 3 * big);
+      const d = crowd ? Math.max(6, 0.9 * this.gridSize + 2 * big) : sim.cube ? Math.max(8, 0.9 * this.arena) : Math.max(4, 3 * big);
       this.crowdDist = d;
       this.wantDist = undefined;
       if (sim.light && !crowd) {

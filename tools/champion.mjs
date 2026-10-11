@@ -7,18 +7,19 @@ import { initPhysics, evaluate, TASKS } from '../src/sim.js';
 await initPhysics();
 const run = JSON.parse(readFileSync(process.argv[2]));
 const H = run.history, task = run.task, kind = TASKS[task].kind;
+const scene = run.scene ?? null;   // null: the legacy scene (runs from before scenes)
 let pick = H[H.length - 1], score = pick.best;
 if (kind === 'follow') {
   score = -Infinity;
   for (const h of H.slice(-20)) {
     const phases = [0, 0.7, 1.4, 2.1];
-    const s = phases.reduce((a, ph) => a + evaluate(task, [h.genome], { phase: ph })[0], 0) / phases.length;
+    const s = phases.reduce((a, ph) => a + evaluate(task, [h.genome], { phase: ph, scene })[0], 0) / phases.length;
     if (s > score) { score = s; pick = { ...h, phase: 0 }; }
   }
 } else if (kind !== 'compete') {
   for (const h of H) if (h.best > score) { score = h.best; pick = h; }
 }
-const fit = pick.opponent ? evaluate(task, [pick.genome, pick.opponent], { phase: pick.phase })[0] : evaluate(task, [pick.genome], { phase: pick.phase })[0];
+const fit = evaluate(task, pick.opponent ? [pick.genome, pick.opponent] : [pick.genome], { phase: pick.phase, scene })[0];
 mkdirSync('champions', { recursive: true });
 // plan-specific champions: champions/<task>[-<plan>][-round][-seeded].json,
 // also listed under Examples in the app
@@ -30,7 +31,7 @@ const file = `champions/${task}${tag}.json`;
 const label = `${TASKS[task].label} · ${planName === 'free' ? 'free' : b.plan.type + (b.plan.n ? ' ×' + b.plan.n : '')}${b.round ? ', round parts' : ''}${seeded ? ', from tentacles' : ''}`;
 writeFileSync(file, JSON.stringify({
   task, generations: H.length, gen: pick.gen, fitness: fit, phase: pick.phase || 0,
-  genome: pick.genome, opponent: pick.opponent || null, label,
+  genome: pick.genome, opponent: pick.opponent || null, label, ...(scene ? { scene } : {}),
 }));
 if (tag) {
   const idx = existsSync('examples/index.json') ? JSON.parse(readFileSync('examples/index.json')) : [];

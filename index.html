@@ -45,6 +45,7 @@
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .row label { color: var(--muted); display: flex; gap: 6px; align-items: center; }
   input[type=number] { width: 72px; }
+  [hidden] { display: none !important; }
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
   .stat { background: #20252d; border-radius: 6px; padding: 6px 8px; }
   .stat b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
@@ -61,6 +62,8 @@
   #islandList { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
   #islandList div { background: #20252d; border-radius: 6px; padding: 4px 7px; cursor: pointer; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
   #islandList div:hover { border-color: #46505e; }
+  #islandList div.top { border-color: var(--accent); }
+  #islandGen { font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0; }
   #islandList i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
   #islandList span { color: var(--muted); font-size: 11px; }
   @media (max-width: 760px) {
@@ -78,6 +81,7 @@
     <button id="record" title="Record the replay from the start as a video; click again to stop early">● Record</button>
     <select id="show" title="Which creatures to show">
       <option value="best" selected>Best</option>
+      <option value="ever" title="The highest-scoring generation best of the whole run">Best so far</option>
       <option value="islands">Island bests</option>
       <option value="top">Top 25</option>
       <option value="all">Whole population</option>
@@ -139,13 +143,34 @@
   <div class="legend"><span><i style="background:var(--accent)"></i>best</span><span><i style="background:var(--accent2)"></i>mean</span></div>
 
   <div id="islandBox" hidden>
-    <h2>Islands</h2>
+    <h2>Islands <span id="islandGen" class="sub"></span></h2>
     <div id="islandList"></div>
     <div class="row" style="margin-top:8px">
       <button id="mate" title="Cross every island's best with every other island's best; show the hybrids and add the best to the islands">Mate island bests</button>
     </div>
     <p class="note" id="mateNote"></p>
   </div>
+
+  <h2>Scene</h2>
+  <div class="row" id="scene">
+    <label title="Seconds each creature is scored for, after settling. Blank = this target's default">Lifespan <input type="number" id="scDuration" min="2" max="60" step="1"> s</label>
+    <label data-env="land" title="Gravity on land, m/s². Earth 9.81, Moon 1.62, Mars 3.71">Gravity <input type="number" id="scGravity" min="0.5" max="30" step="0.1"></label>
+    <label data-env="land" title="Friction between bodies and the ground (and the ball). Low = icy">Friction <input type="number" id="scFriction" min="0" max="3" step="0.1"></label>
+    <label data-env="water" title="Water viscosity: how hard the water pushes back on a moving part">Viscosity <input type="number" id="scDrag" min="0.2" max="20" step="0.2"></label>
+    <label data-kind="follow" title="How far away the light starts">Light distance <input type="number" id="scLightDist" min="1" max="30" step="0.5"> m</label>
+  </div>
+  <div class="row" data-kind="compete" style="margin-top:8px">
+    <label title="What the two creatures compete for: a ball rolls, so it can be pushed and dribbled; the cube of Sims' paper slides">Prize <select id="scBall"><option value="sphere">ball</option><option value="cube">cube</option></select></label>
+    <label title="Ball radius, or half the cube's side">Size <input type="number" id="scBallSize" min="0.05" max="1" step="0.05"> m</label>
+    <label title="Mass of the ball or cube">Mass <input type="number" id="scBallMass" min="0.01" max="5" step="0.01"> kg</label>
+  </div>
+  <div class="row" data-kind="compete" style="margin-top:8px">
+    <label title="Each contestant starts with its near side this far from the prize's centre">Start distance <input type="number" id="scGap" min="0.5" max="20" step="0.5"> m</label>
+    <label title="Also add each contestant's own length to its start distance, so a tall body can't win by toppling onto the prize"><input type="checkbox" id="scGapBody"> + body length</label>
+    <label title="Contestants bigger than this are scaled down to it">Size cap <input type="number" id="scMaxVolume" min="0.1" max="3" step="0.1"> m³</label>
+  </div>
+  <div class="row" style="margin-top:8px"><button id="scReset" title="Restore the default scene">Default scene</button></div>
+  <p class="note" id="sceneNote"></p>
 
   <h2>Best of each generation</h2>
   <div id="gens"></div>

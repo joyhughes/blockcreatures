@@ -39,8 +39,9 @@ export class Evolver {
   // novelty: 0..1 weight of novelty rank in selection; structural: share of
   // mutants given a structural change; migrate: 0 = never. All 0 with
   // islands 1 is Sims' scheme, and reproduces earlier runs exactly.
-  constructor({ task, popSize = 300, survival = 0.2, seed = 1, evaluate, body = {}, islands = 1, migrate = 10, novelty = 0, structural = 0 }) {
+  constructor({ task, popSize = 300, survival = 0.2, seed = 1, evaluate, body = {}, islands = 1, migrate = 10, novelty = 0, structural = 0, scene = null }) {
     this.body = body;
+    this.scene = scene;   // sim scene parameters (sim.js SCENE); null = the legacy scene
     this.islands = Math.max(1, Math.min(islands, Math.floor(popSize / 10)));
     this.migrate = migrate;
     this.novelty = novelty;
@@ -119,6 +120,8 @@ export class Evolver {
   async step() {
     const task = TASKS[this.task];
     const rng = this.rng;
+    // the scene changed (main.js): scores from the old one don't carry over
+    if (this.rescore) { this.rescore = false; for (const p of this.pop) p.fit = null; }
     // tasks whose conditions change between generations get re-evaluated
     const varying = task.kind === 'follow' || task.kind === 'compete';
     const phase = task.kind === 'follow' ? rng() * 2 * Math.PI : 0;
@@ -127,7 +130,7 @@ export class Evolver {
     const jobs = todo.map(p => ({
       task: this.task,
       genomes: task.pair ? [p.g, this.opponent] : [p.g],
-      opts: { phase },
+      opts: { phase, scene: this.scene },
     }));
     const res = await this.evaluate(jobs);
     todo.forEach((p, i) => { p.fit = res[i][0]; });
@@ -140,7 +143,7 @@ export class Evolver {
       gen: this.gen, best: best.fit,
       mean: fits.reduce((a, b) => a + b, 0) / fits.length,
       median: fits[fits.length >> 1],
-      genome: clone(best.g), id: best.id, phase,
+      genome: clone(best.g), id: best.id, phase, scene: this.scene,
       // diversity: distinct generation-0 ancestors (first parent) in the population
       founders: new Set(this.pop.map(p => p.founder)).size,
       diversity: div.within, islandSpread: div.between,
@@ -171,7 +174,7 @@ export class Evolver {
       islandGenomes: sizes.length > 1 ? islandBest.map(b => clone(b.g)) : undefined,
     });
     // the evaluated generation, best first, for showing the whole population
-    this.lastPop = { gen: this.gen, phase, opponent: this.history[this.history.length - 1].opponent,   // the one they faced
+    this.lastPop = { gen: this.gen, phase, scene: this.scene, opponent: this.history[this.history.length - 1].opponent,   // the one they faced
       members: this.pop.map(p => ({ g: p.g, fit: p.fit, isl: p.isl })) };
     this.pop = next;
     this.gen++;
@@ -207,7 +210,7 @@ export class Evolver {
     const last = this.history[this.history.length - 1];
     const phase = last?.phase || 0;
     const res = await this.evaluate(kids.map(k => ({
-      task: this.task, genomes: task.pair ? [k.g, last?.opponent || this.opponent] : [k.g], opts: { phase },
+      task: this.task, genomes: task.pair ? [k.g, last?.opponent || this.opponent] : [k.g], opts: { phase, scene: this.scene },
     })));
     kids.forEach((k, i) => { k.fit = res[i][0]; });
     kids.sort((x, y) => y.fit - x.fit);
