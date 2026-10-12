@@ -106,10 +106,10 @@ const PLAN_NOTES = {
   radial: 'N-fold symmetric about the vertical axis. Parts on the axis become cylinders; other attachments are repeated around it. Each arm senses its position (2k/N), so the arms can beat in a travelling wave.',
   snake: 'Animal template: a head and a body chain (3–8 segments) tapering into a tail. Templates fix which parts there are and how they attach; evolution tunes their sizes, joints, chain lengths, attachment points and brains.',
   quadruped: 'Animal template: a body on four legs, each with a hip and a knee and ending in a paw with five toes; a head, with an optional neck and trunk; an optional tail. Evolution tunes sizes, joints, attachment points and brains, and switches the optional parts on and off.',
-  insect: 'Animal template: a thorax with six one-joint legs, a head with optional antennae and mandibles, and an abdomen with an optional stinger.',
-  arachnid: 'Animal template: a body with eight one-joint legs (optional pincers on the front pair), a head with optional mandibles, and an optional tail with a stinger.',
-  crustacean: 'Animal template: a carapace with ten one-joint legs, the front pair ending in pincers; a head with antennae; an optional segmented tail.',
-  centipede: 'Animal template: a head with optional pincers and a chain of 3–8 segments with a pair of one-joint legs on each.',
+  insect: 'Animal template: a thorax with six legs (hip and knee), a head with optional antennae and mandibles, and an abdomen with an optional stinger.',
+  arachnid: 'Animal template: a body with eight legs (hip and knee) (optional pincers on the front pair), a head with optional mandibles, and an optional tail with a stinger.',
+  crustacean: 'Animal template: a carapace with ten legs (hip and knee), the front pair ending in pincers; a head with antennae; an optional segmented tail.',
+  centipede: 'Animal template: a head with optional pincers and a chain of 3–8 segments with a pair of legs (hip and knee) on each.',
   biped: 'Animal template: an upright torso on two legs (hip, knee and ankle), with an optional head, arms and tail. The Biped walking target always uses it.',
 };
 // a target that needs one body plan (biped walking) uses it whatever is picked

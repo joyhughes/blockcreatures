@@ -781,7 +781,12 @@ const R0 = [[-0.3, 0.3], [-0.4, 0.4], [-0.4, 0.4]];
 // a chain: the part repeats from its own far end
 const chain = (to, scale = [0.75, 1], rot = [[-0.2, 0.2], [-0.3, 0.3], [-0.3, 0.3]]) => ({ to, face: 0, u: 0, v: 0, rot, scale });
 // a pair of limbs on the +Z side face (mirrored to -Z) at fore-aft position u, tilted down
-const sideLeg = (to, u, splay = [-0.3, 0.3], down = [0.1, 1]) => ({ to, face: 4, u: [u - 0.1, u + 0.1], v: [-0.8, 0.1], rot: [[-0.3, 0.3], down, splay], scale: [0.8, 1.2] });
+// the upper leg leaves roughly level (down < 0 lifts it), and a knee bends the lower leg down
+const sideLeg = (to, u, splay = [-0.3, 0.3], down = [-0.5, 0.5]) => ({ to, face: 4, u: [u - 0.1, u + 0.1], v: [-0.8, 0.1], rot: [[-0.3, 0.3], down, splay], scale: [0.8, 1.2] });
+const knee = to => ({ to, face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [0.4, 1], [-0.3, 0.3]], scale: [0.8, 1.1] });
+// lower legs come last in each template, after the roles they hang from, so
+// genomes from before knees keep their node numbers (and replay unchanged)
+const LOWER = { dims: [[0.2, 0.5], [0.04, 0.09], [0.04, 0.09]], joints: BEND, conns: [] };
 // five toes across a paw's front face, fanned outward (rotation about their Y
 // turns them toward the paw's +Y side) so they never cross
 const toes = to => [-0.8, -0.4, 0, 0.4, 0.8].map(v => ({ to, face: 5, u: [-0.3, 0.3], v: [v - 0.05, v + 0.05], rot: [[-0.05, 0.05], [0.3 * v - 0.03, 0.3 * v + 0.03], [-0.3, 0.3]], scale: 1 }));
@@ -836,10 +841,11 @@ export const TEMPLATES = {
     ] },
     antenna: { optional: true, dims: [[0.12, 0.35], [0.03, 0.06], [0.03, 0.06]], joints: MOVE, recur: [1, 3], minDim: 0.03, conns: [chain('antenna', [0.7, 1])] },
     mandible: { optional: true, dims: [[0.08, 0.2], [0.04, 0.08], [0.04, 0.08]], joints: BEND, minDim: 0.03, conns: [] },
-    leg: { dims: [[0.3, 0.7], [0.05, 0.12], [0.05, 0.12]], joints: LIMB, conns: [] },
+    leg: { dims: [[0.2, 0.45], [0.05, 0.12], [0.05, 0.12]], joints: LIMB, conns: [knee('lowerLeg')] },
     abdomen: { dims: [[0.3, 0.8], [0.15, 0.35], [0.15, 0.4]], joints: ANY,
       conns: [{ to: 'stinger', face: 0, u: [-0.5, 0.5], v: 0, rot: R0, scale: 1 }] },
     stinger: { optional: true, dims: [[0.08, 0.2], [0.03, 0.06], [0.03, 0.06]], joints: MOVE, minDim: 0.03, conns: [] },
+    lowerLeg: LOWER,
   } },
   // a body with eight one-joint legs, maybe pincers on the front pair; a head
   // (mandibles); maybe a tail with a stinger
@@ -852,13 +858,15 @@ export const TEMPLATES = {
     head: { dims: [[0.12, 0.3], [0.1, 0.25], [0.12, 0.3]], joints: ANY,
       conns: [{ to: 'mandible', face: 0, u: [-0.9, -0.3], v: [0.4, 0.9], rot: [[-0.3, 0.3], [-0.5, 0.5], [-0.5, 0.5]], scale: 1 }] },
     mandible: { optional: true, dims: [[0.08, 0.2], [0.04, 0.08], [0.04, 0.08]], joints: BEND, minDim: 0.03, conns: [] },
-    frontLeg: { dims: [[0.3, 0.7], [0.05, 0.12], [0.05, 0.12]], joints: LIMB,
-      conns: [{ to: 'pincer', face: 0, u: 0, v: 0, rot: R0, scale: 1 }] },
+    frontLeg: { dims: [[0.2, 0.45], [0.05, 0.12], [0.05, 0.12]], joints: LIMB, conns: [knee('frontLower')] },
     pincer: { optional: true, dims: [[0.1, 0.25], [0.08, 0.15], [0.04, 0.08]], joints: BEND, conns: [] },
-    leg: { dims: [[0.3, 0.7], [0.05, 0.12], [0.05, 0.12]], joints: LIMB, conns: [] },
+    leg: { dims: [[0.2, 0.45], [0.05, 0.12], [0.05, 0.12]], joints: LIMB, conns: [knee('lowerLeg')] },
     tail: { optional: true, dims: [[0.1, 0.25], [0.06, 0.14], [0.06, 0.14]], joints: SEG, recur: [2, 6],
       conns: [chain('tail', [0.8, 1], [[-0.2, 0.2], [-0.3, 0.3], [0, 0.6]]), { to: 'stinger', face: 0, u: 0, v: 0, rot: R0, scale: 1, terminal: true }] },
     stinger: { optional: true, dims: [[0.08, 0.2], [0.03, 0.06], [0.03, 0.06]], joints: MOVE, minDim: 0.03, conns: [] },
+    // the front pair's lower legs carry the pincers
+    frontLower: { ...LOWER, conns: [{ to: 'pincer', face: 0, u: 0, v: 0, rot: R0, scale: 1 }] },
+    lowerLeg: LOWER,
   } },
   // a carapace with ten one-joint legs, the front pair ending in pincers; a
   // head with antennae; maybe a segmented tail
@@ -872,12 +880,14 @@ export const TEMPLATES = {
     head: { dims: [[0.1, 0.25], [0.1, 0.22], [0.12, 0.3]], joints: ANY,
       conns: [{ to: 'antenna', face: 0, u: [0, 0.8], v: [0.4, 0.9], rot: [[-0.3, 0.3], [-0.6, 0.2], [0, 0.8]], scale: 1 }] },
     antenna: { dims: [[0.15, 0.4], [0.03, 0.06], [0.03, 0.06]], joints: MOVE, recur: [1, 4], minDim: 0.03, conns: [chain('antenna', [0.7, 1])] },
-    claw: { dims: [[0.25, 0.55], [0.06, 0.14], [0.06, 0.14]], joints: LIMB,
-      conns: [{ to: 'pincer', face: 0, u: 0, v: 0, rot: R0, scale: 1 }] },
+    claw: { dims: [[0.2, 0.45], [0.06, 0.14], [0.06, 0.14]], joints: LIMB, conns: [knee('clawLower')] },
     pincer: { dims: [[0.12, 0.3], [0.1, 0.2], [0.05, 0.1]], joints: BEND, conns: [] },
-    leg: { dims: [[0.25, 0.6], [0.04, 0.1], [0.04, 0.1]], joints: LIMB, conns: [] },
+    leg: { dims: [[0.2, 0.45], [0.04, 0.1], [0.04, 0.1]], joints: LIMB, conns: [knee('lowerLeg')] },
     tail: { optional: true, dims: [[0.12, 0.3], [0.08, 0.2], [0.15, 0.4]], joints: SEG, recur: [2, 6],
       conns: [chain('tail', [0.8, 0.98], [[-0.1, 0.1], [-0.2, 0.2], [-0.3, 0.3]])] },
+    // the claws' lower legs (fore-arms) carry the pincers
+    clawLower: { dims: [[0.15, 0.35], [0.05, 0.12], [0.05, 0.12]], joints: BEND, conns: [{ to: 'pincer', face: 0, u: 0, v: 0, rot: R0, scale: 1 }] },
+    lowerLeg: LOWER,
   } },
   // a head (maybe pincers) and a chain of segments, a pair of one-joint legs on each
   centipede: { roles: {
@@ -887,8 +897,9 @@ export const TEMPLATES = {
     ] },
     pincer: { optional: true, dims: [[0.08, 0.2], [0.04, 0.08], [0.04, 0.08]], joints: BEND, minDim: 0.03, conns: [] },
     segment: { dims: [[0.15, 0.3], [0.08, 0.18], [0.15, 0.35]], joints: SEG, recur: [3, 8],
-      conns: [chain('segment', [0.9, 1.05]), { to: 'leg', face: 4, u: [-0.3, 0.3], v: [-0.8, 0.1], rot: [[-0.3, 0.3], [0.1, 1], [-0.4, 0.4]], scale: 1 }] },
-    leg: { dims: [[0.15, 0.4], [0.04, 0.08], [0.04, 0.08]], joints: LIMB, conns: [] },
+      conns: [chain('segment', [0.9, 1.05]), { to: 'leg', face: 4, u: [-0.3, 0.3], v: [-0.8, 0.1], rot: [[-0.3, 0.3], [-0.5, 0.5], [-0.4, 0.4]], scale: 1 }] },
+    leg: { dims: [[0.1, 0.25], [0.04, 0.08], [0.04, 0.08]], joints: LIMB, conns: [knee('lowerLeg')] },
+    lowerLeg: { dims: [[0.12, 0.3], [0.03, 0.07], [0.03, 0.07]], joints: BEND, conns: [] },
   } },
   // an upright torso on two legs (hip, knee, ankle); maybe a head, arms and a tail
   biped: { roles: {

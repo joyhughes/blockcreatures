@@ -115,11 +115,16 @@ matching roles. Grafting swaps one role's node for the other parent's.
 |---|---|
 | Snake | head; body chain of 3–8 segments, ending in a tail chain of 1–6 |
 | Quadruped | body; four legs with hip and knee, each ending in a paw (fused) with five toes; head, optional neck and trunk (2–5 segments); optional tail (2–6) |
-| Insect | thorax with six one-joint legs; head with optional antennae (1–3 segments) and mandibles; abdomen with optional stinger |
-| Arachnid | body with eight one-joint legs, optional pincers on the front pair; head with optional mandibles; optional tail (2–6) with stinger |
-| Crustacean | carapace with ten one-joint legs, the front pair ending in pincers; head with antennae (1–4 segments); optional segmented tail (2–6) |
-| Centipede | head with optional pincers; 3–8 segments with two one-joint legs each |
+| Insect | thorax with six legs, each with a hip and a knee; head with optional antennae (1–3 segments) and mandibles; abdomen with optional stinger |
+| Arachnid | body with eight legs with hip and knee, optional pincers on the front pair; head with optional mandibles; optional tail (2–6) with stinger |
+| Crustacean | carapace with ten legs with hip and knee, the front pair ending in pincers; head with antennae (1–4 segments); optional segmented tail (2–6) |
+| Centipede | head with optional pincers; 3–8 segments with two legs each, with hip and knee |
 | Biped | upright torso; two legs with hip, knee and ankle, ending in a flat foot; optional head, two-joint arms and tail (1–5) |
+
+Insect, arachnid, crustacean and centipede legs have knees: the upper leg
+leaves the body roughly level and the lower leg bends down from it. The
+lower legs come last in the genome, so the earlier one-joint champions still
+replay unchanged, and seeding from one gives it knees.
 
 The quadruped's toes are fused to the paw. Jointed, they were light enough
 for the solver to gain energy, and one in eight random quadrupeds failed the
