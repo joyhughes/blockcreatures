@@ -14,9 +14,9 @@ evolved together, for the same evolutionary targets Sims used:
 | Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball (nearest part), less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"), of its own population or, with **Teams**, of a rival species; sizes capped at equal volume |
 | Cooperation (beyond Sims) | land, two creatures side by side behind a heavy ball, a goal ahead | one shared score: 0.8 × the share of the way the ball got to the goal + 0.2 × the share of their distance to the ball the two closed; a goal ends the game and scores 1 + the share of time left (so 1–2) |
 | Volley (beyond Sims) | land, two creatures facing each other across a light ball | one shared score: the number of passes (the ball travels ≥ 0.5 m between one creature's touch and the other's), plus up to 0.75 before the first for touching it and closing on it |
-| Wrestling (beyond Sims) | land, two same-size creatures face to face, no ball | sumo: 1 + (how far the opponent's centre of mass ever got outside a 2 m ring − how far mine did) / 1 m, capped to 0–2; all vs. best like competition |
+| Wrestling (beyond Sims) | land, two same-size creatures face to face, no ball | sumo: 1 + (how far the opponent's centre of mass ever got outside a 2 m ring − how far mine did) / 1 m + 0.5 × (its mean distance from the middle − mine) / 2 m, capped to 0–2; all vs. best like competition |
 | Stairs (beyond Sims) | land, a pit at the bottom of a square stepped amphitheatre (12 steps of 0.15 × 0.4 m) | metres climbed: ½ the centre of mass's rise + ½ the lowest part's final height |
-| Lifting (beyond Sims) | land, a light cube (0.2 m, 0.1 kg) on the ground beside the creature | the cube's height off the ground averaged over the last second, + up to 0.2 for closing on it |
+| Lifting (beyond Sims) | land, a barbell (a 1.2 m bar between two square 0.4 m plates, 0.3 kg; the bar 0.2 m off the ground) beside the creature | the barbell's height off the ground averaged over the last second, + up to 0.2 for closing on it |
 
 ### Falling over: Sims' rules
 
@@ -244,7 +244,10 @@ volume, with no ball. Each photosensor sees the opponent. It's sumo: a ring
 how far each one's centre of mass ever got outside it during the 20 s
 (or outside its own start, for a tall body that Sims' start zone puts
 further back than the ring):
-1 + (how far you got out − how far I did) / 1 m, capped to 0–2. Walking
+1 + (how far you got out − how far I did) / 1 m, plus 0.5 × the difference
+in average distance from the middle in ring radii, capped to 0–2. Without
+the centre term, standing apart at the edges was a sure draw and evolved
+wrestlers barely moved. Walking
 straight through takes both out the far side, a draw, so staying in and
 shoving the other out is what wins. Two earlier rules, the pair's midpoint
 moving toward the opponent and then distance pushed back from the start,
@@ -261,12 +264,17 @@ centre of mass's rise plus half the lowest part's final height: standing up
 tall earns a little, and every part has to get up the steps to earn the
 rest. The HUD shows the lowest part's height.
 
-**Lifting**: when measuring starts, a light cube (0.1 m half-size, 0.1 kg;
-the scene's Prize, Size and Mass) appears on the ground 0.3 m beyond the
-creature's furthest point, where its photosensors can see it. The score is
-the cube's height off the ground averaged over the last second of 15, so it
-has to be held up, not kicked: plus up to 0.2 for closing on it. There is no
-grip; a creature has to scoop, pinch or balance the cube with friction.
+**Lifting**: when measuring starts, a barbell appears 0.3 m beyond the
+creature's furthest point, lying across its path where its photosensors can
+see it: a bar 1.2 m long between two square plates 0.4 m high, so the bar
+is 0.2 m off the ground and a part can get under it (0.3 kg in all; the
+scene's Prize, Size and Mass, Size being the plates' half-height). The
+plates are square, like hex dumbbells, because round ones rolled away when
+pushed. The score is the barbell's height off the ground averaged over the
+last second of 15, so it has to be held up, not kicked, plus up to 0.2 for
+closing on it. There is no grip: a creature has to hook or scoop the bar.
+A light cube (Prize: cube) is the original object; with it, evolution found
+only propping it against the body (6 cm).
 
 ## Both sides
 

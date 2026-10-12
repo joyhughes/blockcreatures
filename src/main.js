@@ -734,7 +734,7 @@ function hudText(finalFit) {
   if (sim.settling) s = sim.relaxing && sim.tStart === null ? `relaxing ${sim.t.toFixed(1)}s (no friction, no muscles)` : `settling ${sim.t.toFixed(1)}s`;
   if (T.trials > 1) s += ` · trial ${replay.trial + 1}/${T.trials}`;
   if (sim.coop) s += sim.scored !== null ? ` · GOAL at ${sim.scored.toFixed(1)}s` : sim.tStart !== null ? ` · ball ${sim.ballToGoal().toFixed(2)} m from the goal` : '';
-  if (sim.lift && sim.cube && sim.tStart !== null) s += ` · cube ${Math.max(0, sim.cube.translation().y - sim.ballR).toFixed(2)} m up`;
+  if (sim.lift && sim.cube && sim.tStart !== null) s += ` · weight ${Math.max(0, sim.cube.translation().y - sim.ballR).toFixed(2)} m up`;
   if (sim.statics && sim.tStart !== null && sim.creatures[0].valid) s += ` · lowest part ${Math.max(0, sim.creatures[0].lowest()).toFixed(2)} m up`;
   if (sim.volley && sim.tStart !== null) s += ` · ${sim.passes} pass${sim.passes === 1 ? '' : 'es'}`;
   if (sim.coop && sim.scene.together > 0 && sim.playSteps) s += ` · both on it ${Math.round(100 * sim.bothSteps / sim.playSteps)}%`;

@@ -87,6 +87,8 @@ export class View {
     const bt = new THREE.CanvasTexture(bc);
     bt.colorSpace = THREE.SRGBColorSpace;
     this.ballMat = new THREE.MeshStandardMaterial({ map: bt, roughness: 0.45 });
+    // lifting: the barbell's bar, steel
+    this.barMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 0.6, roughness: 0.35 });
     // stairs: pale stone
     this.stairMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: 0.85 });
     // cooperation: the goal, a ring with a faint disc, flat on the ground
@@ -171,7 +173,19 @@ export class View {
         else { cell.light = this.light.clone(false); cell.light.add(this.light.children[1].clone()); this.add(cell.light); }
         cell.light.position.fromArray(sim.light).add(off);
       }
-      if (sim.cube) {
+      if (sim.barbell) {
+        // lifting: a group of a bar and two plates, moved as one body
+        cell.cube = new THREE.Group();
+        for (const b of sim.barbell) {
+          const geo = new THREE.BoxGeometry(2 * b.box[0], 2 * b.box[1], 2 * b.box[2]);
+          this.owned.push(geo);
+          const m = new THREE.Mesh(geo, b.plate ? this.cubeMat : this.barMat);
+          m.position.fromArray(b.at);
+          m.castShadow = true;
+          cell.cube.add(m);
+        }
+        this.add(cell.cube);
+      } else if (sim.cube) {
         if (k === 0) { cell.cube = this.cube; this.cube.visible = true; }
         else { cell.cube = this.cube.clone(); this.add(cell.cube); }
         cell.cube.geometry = sim.ballSphere ? this.ballGeo : this.cubeGeo;

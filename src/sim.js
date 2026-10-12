@@ -60,7 +60,7 @@ export const TASKS = {
     scene: { duration: 20 } },
   // a light cube on the ground beside it: lift it as high as it can hold it
   lift: { label: 'Lifting', env: 'land', duration: 15, settle: 1, trials: 1, kind: 'lift',
-    scene: { ball: 'cube', ballSize: 0.1, ballMass: 0.1, duration: 15 } },
+    scene: { ball: 'barbell', ballSize: 0.2, ballMass: 0.3, duration: 15 } },
 };
 // targets that came after scenes: a run without one has no legacy scene
 const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift'];
@@ -71,7 +71,9 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift'];
 //   duration   seconds measured after settling (null = the task's own)
 //   gravity    m/s^2 on land          friction   ground and body friction
 //   drag       water viscosity        lightDist  light's distance (following)
-//   ball       'sphere' | 'cube'      ballSize   radius / half side (m)
+//   ball       'sphere' | 'cube' | 'barbell' (lifting: a bar between two plates, the bar
+//              off the ground so a part can get under it)
+//              ballSize   radius / half side (m); a barbell's plate radius
 //   ballMass   kg                     gap        start distance from the ball centre, at ground level
 //   zone       starting zone (as Sims): 'plane' = behind a plane rising from the ground `gap` from
 //              the ball at `slope` degrees, so taller bodies start further back; 'length' = the
@@ -121,6 +123,7 @@ const RELAX_MIN = 0.3, RELAX_MAX = 5;   // ... but at least / at most this long
 const BALL_ROLL = 0.02;
 const APART = 50;   // settling apart: each creature this far to the side (m)
 const WRESTLE_SCALE = 1;   // wrestling: this much further (m) outside the ring than the other is a full loss
+const WRESTLE_CENTRE = 0.5;   // wrestling: weight of holding the middle (mean distance from it, in ring radii)
 const STAIR_MARGIN = 0.3;   // stairs: the pit reaches this far (m) past the creature's widest point
 const STAIR_TOP = 10;   // stairs: the top step is a plateau this wide (m), so climbing over it can't fall off the far side
 const LIFT_GAP = 0.3;   // lifting: the cube starts this far (m) beyond the creature's furthest point in +x
@@ -734,11 +737,28 @@ export class Sim {
   // the ball (or cube) resting on the ground at p; added mid-run (lifting),
   // its energy joins the audit's starting energy
   addBall(p) {
+    if (this.scene.ball === 'barbell') return this.addBarbell(p);
     const sc = this.scene, r = this.ballR = sc.ballSize, sphere = this.ballSphere = sc.ball === 'sphere';
     const vol = sphere ? 4 / 3 * Math.PI * r ** 3 : 8 * r ** 3;
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(p[0], r, p[2]).setCanSleep(false));
     this.ballCol = this.world.createCollider((sphere ? RAPIER.ColliderDesc.ball(r) : RAPIER.ColliderDesc.cuboid(r, r, r))
       .setDensity(sc.ballMass / vol).setFriction(sc.friction), body);
+    this.cube = body;
+    if (this.e0 !== undefined) { this.e0 += body.mass() * this.g * r; this.mass += body.mass(); }
+  }
+
+  // a barbell lying across the +x direction (bar along z): square plates
+  // 2r high at the ends of a bar 6r long, so the bar is r off the ground.
+  // Square, like hex dumbbells: round plates roll away when pushed.
+  addBarbell(p) {
+    const sc = this.scene, r = this.ballR = sc.ballSize, t = r / 4, L = 3 * r;
+    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(p[0], r, p[2]).setCanSleep(false));
+    const barVol = 8 * t * t * L, plateVol = 8 * r * r * t;
+    // 30% of the mass in the bar, 35% in each plate
+    this.world.createCollider(RAPIER.ColliderDesc.cuboid(t, t, L).setDensity(0.3 * sc.ballMass / barVol).setFriction(sc.friction), body);
+    for (const z of [-L, L]) this.world.createCollider(RAPIER.ColliderDesc.cuboid(r, r, t).setTranslation(0, 0, z).setDensity(0.35 * sc.ballMass / plateVol).setFriction(sc.friction), body);
+    this.barbell = [{ box: [t, t, L], at: [0, 0, 0] }, { box: [r, r, t], at: [0, 0, -L], plate: true }, { box: [r, r, t], at: [0, 0, L], plate: true }];
+    this.ballSphere = false;
     this.cube = body;
     if (this.e0 !== undefined) { this.e0 += body.mass() * this.g * r; this.mass += body.mass(); }
   }
@@ -921,9 +941,16 @@ export class Sim {
     this.creatures.forEach(c => { if (c.valid) e += c.fullEnergy(this.g); });
     if (this.cube) {
       const v = this.cube.linvel(), w = this.cube.angvel(), m = this.cube.mass();
-      const r = this.ballR, I = this.ballSphere ? 0.4 * m * r * r : m * (2 * r) ** 2 / 6;
       e += m * (0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + this.g * this.cube.translation().y);
-      e += 0.5 * I * (w.x * w.x + w.y * w.y + w.z * w.z);
+      if (this.barbell) {
+        // w in the principal frame: 1/2 sum I_k w_k^2
+        const I = this.cube.principalInertia(), f = qmul(this.cube.rotation(), this.cube.principalInertiaLocalFrame());
+        const wl = qrot(qconj(f), [w.x, w.y, w.z]);
+        e += 0.5 * (I.x * wl[0] ** 2 + I.y * wl[1] ** 2 + I.z * wl[2] ** 2);
+      } else {
+        const r = this.ballR, I = this.ballSphere ? 0.4 * m * r * r : m * (2 * r) ** 2 / 6;
+        e += 0.5 * I * (w.x * w.x + w.y * w.y + w.z * w.z);
+      }
     }
     return e;
   }
@@ -962,8 +989,9 @@ export class Sim {
       // furthest its centre of mass got outside the ring, or outside its
       // start if that was further out (a tall body starts further back)
       const p = c.com(), r = Math.hypot(p[0], p[2]);
-      if (tr.edge === undefined) tr.edge = Math.max(this.ring, r);
+      if (tr.edge === undefined) { tr.edge = Math.max(this.ring, r); tr.rSum = 0; tr.rN = 0; }
       tr.maxOut = Math.max(tr.maxOut || 0, r - tr.edge);
+      tr.rSum += r; tr.rN++;
     } else if (task.kind === 'climb') {
       tr.last = y; tr.low = c.lowest();
     } else if (task.kind === 'cooperate' || task.kind === 'volley' || (task.kind === 'lift' && this.cube)) {
@@ -1032,8 +1060,12 @@ export class Sim {
       // the start, both let them walk straight past each other.
       const cs = this.creatures;
       if (cs.some((c, i) => !c.valid || this.failed[i])) return cs.map(() => 0);
+      // Plus holding the middle: WRESTLE_CENTRE x the difference in mean
+      // distance from it, in ring radii, so standing apart at the edges
+      // (a sure draw otherwise) loses to coming in.
       const [oa, ob] = this.track.map(tr => tr.maxOut || 0);
-      const fa = 1 + Math.max(-1, Math.min(1, (ob - oa) / WRESTLE_SCALE));
+      const [ma, mb] = this.track.map(tr => (tr.rN ? tr.rSum / tr.rN : 0));
+      const fa = 1 + Math.max(-1, Math.min(1, (ob - oa) / WRESTLE_SCALE + WRESTLE_CENTRE * (mb - ma) / this.ring));
       return [fa, 2 - fa];
     }
     if (this.volley) {
