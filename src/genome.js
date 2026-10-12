@@ -778,6 +778,9 @@ const LIMB = ['revolute', 'universal', 'bendtwist', 'twistbend', 'spherical'];
 const SEG = ['revolute', 'universal', 'twist', 'bendtwist', 'twistbend', 'spherical'];
 const FIXED = ['rigid'];
 const R0 = [[-0.3, 0.3], [-0.4, 0.4], [-0.4, 0.4]];
+// an optional flat blade on the last segment of a chain (a tail fin or fluke)
+const BLADE = to => ({ to, face: 0, u: 0, v: 0, rot: [[-0.3, 0.3], [-0.3, 0.3], [-0.3, 0.3]], scale: [0.8, 1.2], terminal: true });
+const BLADE_ROLE = { optional: true, dims: [[0.08, 0.3], [0.03, 0.45], [0.03, 0.45]], joints: ['rigid', 'revolute', 'universal'], minDim: 0.03, conns: [] };
 // a chain: the part repeats from its own far end
 const chain = (to, scale = [0.75, 1], rot = [[-0.2, 0.2], [-0.3, 0.3], [-0.3, 0.3]]) => ({ to, face: 0, u: 0, v: 0, rot, scale });
 // a pair of limbs on the +Z side face (mirrored to -Z) at fore-aft position u, tilted down
@@ -809,14 +812,17 @@ export const TEMPLATES = {
       // legs hang from the underside near its edges, splayed outward only
       { to: 'foreUpper', face: 3, u: [0.7, 0.95], v: [0.5, 0.9], rot: [[-0.2, 0.2], [-0.4, 0.4], [0, 0.4]], scale: [0.8, 1.2] },
       { to: 'hindUpper', face: 3, u: [0.7, 0.95], v: [-0.9, -0.5], rot: [[-0.2, 0.2], [-0.4, 0.4], [0, 0.4]], scale: [0.8, 1.2] },
+      // on the back, on the midplane, anywhere fore and aft
+      { to: 'dorsal', face: 2, u: 0, v: [-0.8, 0.8], rot: [[-0.3, 0.3], [-0.3, 0.3], [-0.3, 0.3]], scale: [0.8, 1.2] },
     ] },
     neck: { optional: true, dims: [[0.15, 0.5], [0.08, 0.2], [0.08, 0.2]], joints: MOVE,
       conns: [{ to: 'head', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.3, 0.3], [-0.9, 0.2]], scale: [0.8, 1.2] }] },
     head: { dims: [[0.15, 0.4], [0.12, 0.3], [0.12, 0.3]], joints: ANY,
       conns: [{ to: 'trunk', face: 0, u: [-0.8, 0], v: 0, rot: [[-0.2, 0.2], [-0.3, 0.3], [-0.6, 0.2]], scale: [0.8, 1.2] }] },
-    trunk: { optional: true, dims: [[0.1, 0.25], [0.05, 0.12], [0.05, 0.12]], joints: SEG, recur: [2, 5],
-      conns: [chain('trunk', [0.75, 0.95], [[-0.2, 0.2], [-0.3, 0.3], [-0.4, 0.1]])] },
-    tail: { optional: true, dims: [[0.1, 0.3], [0.04, 0.12], [0.04, 0.12]], joints: SEG, recur: [2, 6], ground: true, conns: [chain('tail')] },
+    trunk: { optional: true, dims: [[0.1, 0.25], [0.05, 0.2], [0.05, 0.2]], joints: SEG, recur: [2, 5],
+      conns: [chain('trunk', [0.75, 0.95], [[-0.2, 0.2], [-0.3, 0.3], [-0.4, 0.1]]), BLADE('trunkTip')] },
+    tail: { optional: true, dims: [[0.1, 0.3], [0.04, 0.2], [0.04, 0.2]], joints: SEG, recur: [2, 6], ground: true,
+      conns: [chain('tail'), BLADE('fluke')] },
     foreUpper: { dims: [[0.2, 0.5], [0.08, 0.2], [0.08, 0.2]], joints: LIMB, conns: [{ to: 'foreLower', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.4, 0.4], [-0.1, 0.2]], scale: [0.8, 1.2] }] },
     foreLower: { dims: [[0.2, 0.5], [0.06, 0.16], [0.06, 0.16]], joints: BEND, conns: [{ to: 'paw', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [-0.2, 0.2]], scale: 1 }] },
     hindUpper: { dims: [[0.2, 0.5], [0.08, 0.2], [0.08, 0.2]], joints: LIMB, conns: [{ to: 'hindLower', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.4, 0.4], [-0.1, 0.2]], scale: [0.8, 1.2] }] },
@@ -826,6 +832,14 @@ export const TEMPLATES = {
     // solver gain energy
     paw: { dims: [[0.05, 0.1], [0.18, 0.22], [0.12, 0.22]], joints: FIXED, ground: true, conns: toes('toe') },
     toe: { dims: [[0.06, 0.18], [0.025, 0.028], [0.025, 0.028]], joints: FIXED, minDim: 0.02, ground: true, conns: [] },
+    // flat blades at the tips of the tail and the trunk, broad up and down (a
+    // fish's tail fin) or side to side (a whale's fluke), as evolution
+    // chooses their dims; last, so genomes from before them keep their node
+    // numbers
+    fluke: { ...BLADE_ROLE, ground: true },
+    trunkTip: BLADE_ROLE,
+    // a dorsal fin: a blade standing up from the back, its height its length
+    dorsal: { ...BLADE_ROLE, dims: [[0.08, 0.4], [0.03, 0.5], [0.03, 0.5]] },
   } },
   // a thorax with six one-joint legs, a head (antennae, mandibles) and an
   // abdomen (stinger)
@@ -937,9 +951,12 @@ export function conform(g) {
   g.nodes.length = Math.min(g.nodes.length, tpl.order.length);
   tpl.order.forEach((role, i) => {
     const spec = tpl.roles[role];
-    const nd = g.nodes[i] ??= randNode(makeRng(i + 1), {});   // (only a damaged genome is short)
+    // a short genome is damaged, or from before a role was added: an optional
+    // part it never had starts switched off, so it replays as it was
+    const fresh = !g.nodes[i];
+    const nd = g.nodes[i] ??= randNode(makeRng(i + 1), {});
     nd.role = role;
-    nd.on = spec.optional ? nd.on !== false : true;
+    nd.on = spec.optional ? !fresh && nd.on !== false : true;
     if (spec.minDim) nd.minDim = spec.minDim; else delete nd.minDim;
     nd.dims = nd.dims.map((x, k) => clampIn(x, spec.dims[k]));
     if (!spec.joints.includes(nd.joint)) nd.joint = spec.joints[Math.max(0, JOINTS.indexOf(nd.joint)) % spec.joints.length];

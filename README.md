@@ -116,7 +116,7 @@ matching roles. Grafting swaps one role's node for the other parent's.
 | Template | Parts |
 |---|---|
 | Snake | head; body chain of 3–8 segments, ending in a tail chain of 1–6 |
-| Quadruped | body; four legs with hip and knee, each ending in a paw (fused) with five toes; head, optional neck and trunk (2–5 segments); optional tail (2–6) |
+| Quadruped | body; four legs with hip and knee, each ending in a paw (fused) with five toes; head, optional neck and trunk (2–5 segments); optional tail (2–6); optional blades at the tips of the tail (fluke) and trunk; optional dorsal fin |
 | Insect | thorax with six legs, each with a hip and a knee; head with optional antennae (1–3 segments) and mandibles; abdomen with optional stinger |
 | Arachnid | body with eight legs with hip and knee, optional pincers on the front pair; head with optional mandibles; optional tail (2–6) with stinger |
 | Crustacean | carapace with ten legs with hip and knee, the front pair ending in pincers; head with antennae (1–4 segments); optional segmented tail (2–6) |
@@ -132,10 +132,23 @@ The quadruped's toes are fused to the paw. Jointed, they were light enough
 for the solver to gain energy, and one in eight random quadrupeds failed the
 energy audit. Toes fan outward so neighbours never cross.
 
+The quadruped's tail and trunk can end in a flat blade (optional, rigid or
+on a hinge). Evolution sets its dims, so it can come out broad up and down
+like a fish's tail fin or side to side like a whale's fluke, up to 0.45 m
+across. Without it, a tail could only get broad along its whole length,
+since a chain repeats one part, tapering. The tail and trunk segments can
+also be up to 0.2 m thick (was 0.12). An optional dorsal fin stands up from
+the middle of the back, anywhere fore and aft, up to 0.4 m tall and 0.5 m
+long. The blades and the fin come last in the genome and
+start switched off in genomes from before them, so those replay unchanged.
+In the energy audit, random quadrupeds with all three on stayed under the
+1 J/kg limit in water (worst 0.58). The same body with none of them gained
+0.28, so the blades only shift the solver's noise.
+
 **Biped walking** and **Quadruped walking** (targets): each uses its
 template whatever plan is picked. Only the parts the template marks as
 ground parts may touch the ground: the biped's feet and tail, the
-quadruped's paws, toes and tail.
+quadruped's paws, toes, tail and fluke.
 Any other part touching it is a fall, and the walk ends there. Settling is timed with the brain on, so
 the creature can stand up. Scoring is the walking score up to the fall
 (half max distance / T, half the last third's distance / (T/3)), plus
