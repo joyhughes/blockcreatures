@@ -10,7 +10,7 @@
 // here rather than by the engine, as in Sims' system.
 
 import RAPIER from './rapier.js';
-import { develop, interpenetrates, tooBig, bounds, JOINT_DOFS, NSENS } from './genome.js';
+import { develop, interpenetrates, tooBig, bounds, JOINT_DOFS, NSENS, TEMPLATES } from './genome.js';
 import { compileBrain, brainStep, initBrain } from './brain.js';
 import { quatFromMat, qmul, qconj, qrot, qlog, dot, sub, add, scale, cross, len } from './math.js';
 
@@ -58,12 +58,16 @@ export const TASKS = {
   // from a pit at the bottom of a square stepped amphitheatre, climb
   stairs: { label: 'Stairs', env: 'land', duration: 20, settle: 1, trials: 1, kind: 'climb',
     scene: { duration: 20 } },
+  // walking upright: the biped body plan, and only its feet (and tail) may
+  // touch the ground; settling is timed, brain on, so it can stand up
+  biped: { label: 'Biped walking', env: 'land', duration: 10, settle: 1, trials: 1, kind: 'biped', plan: 'biped',
+    scene: { settle: 'timed' } },
   // a light cube on the ground beside it: lift it as high as it can hold it
   lift: { label: 'Lifting', env: 'land', duration: 15, settle: 1, trials: 1, kind: 'lift',
     scene: { ball: 'barbell', ballSize: 0.2, ballMass: 0.3, duration: 15 } },
 };
 // targets that came after scenes: a run without one has no legacy scene
-const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift'];
+const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'biped'];
 
 // Scene parameters, adjustable per run (the UI's Scene section). A run's
 // scene travels with its jobs, history and champions; a saved creature
@@ -867,6 +871,9 @@ export class Sim {
       c.read();
       c.creditWork();
       if (c.exploded()) { this.failed[i] = true; continue; }
+      // biped: a fall is any part but a foot or the tail touching the
+      // ground, settling included; it ends the walk
+      if (task.kind === 'biped' && this.track[i].fell === undefined && c.parts.some((p, k) => c.onGround[k] && !TEMPLATES.biped.roles[c.genome.nodes[p.node].role]?.ground)) this.track[i].fell = this.t;
       if (this.tStart !== null && this.t >= this.tStart) this.trackStep(i);
     }
     if (this.tStart === null) this.relaxStep();
@@ -997,6 +1004,14 @@ export class Sim {
       tr.maxDist = Math.max(tr.maxDist, len(sub(p, tr.start)));
       if (!tr.mark && elapsed >= this.T * 2 / 3) { tr.mark = p; tr.yMark = tr.minYMark = y; }
       tr.last = p;
+    } else if (task.kind === 'biped') {
+      if (tr.fell === undefined) {
+        const p = [c.com()[0], 0, c.com()[2]];
+        if (!tr.start) tr.start = p;
+        tr.maxDist = Math.max(tr.maxDist, len(sub(p, tr.start)));
+        if (!tr.mark && elapsed >= this.T * 2 / 3) tr.mark = p;
+        tr.last = p;
+      }
     } else if (task.kind === 'jump') {
       // the lowest part's height counts only as far as the COM has also risen
       // above its height when measuring began: a tall body that topples
@@ -1125,6 +1140,14 @@ export class Sim {
         const drop = tr.y0 === undefined ? 0 : tr.y0 - tr.minY;
         const dropLate = tr.yMark === undefined ? 0 : tr.yMark - tr.minYMark;
         return Math.max(0, 0.5 * (tr.maxDist - drop) / T + 0.5 * Math.max(0, len(sub(tr.last, tr.mark)) - dropLate) / (T / 3));
+      }
+      if (task.kind === 'biped') {
+        // as walking (Sims' max distance plus the final third's distance),
+        // up to the fall; plus 0.1 x the share of the time it stayed up,
+        // settling included, so that standing longer is a first step
+        const up = tr.fell === undefined ? 1 : tr.fell / (task.settle + T);
+        if (!tr.start) return 0.1 * up;
+        return 0.5 * tr.maxDist / T + 0.5 * (tr.mark ? len(sub(tr.last, tr.mark)) : 0) / (T / 3) + 0.1 * up;
       }
       if (task.kind === 'jump') return Math.max(0, tr.maxLow);
       // stairs: half the COM's rise, half the lowest point's final height,

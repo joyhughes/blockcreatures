@@ -7,8 +7,10 @@
 // Two extensions beyond Sims: a body plan (free, bilateral or N-fold radial
 // symmetry, applied during development) and round parts (capsules and
 // spheres as well as boxes), so recursive chains can become tentacles.
+// A third: animal templates (snake, quadruped, insect, ...), bilateral
+// genomes whose graph is fixed by the template; see TEMPLATES.
 
-import { I3, mv, mtv, mm, mdiag, det, add, sub, scale, norm, rotX, rotY, rotZ, cross, dot } from './math.js';
+import { I3, mv, mtv, mm, mdiag, det, add, sub, scale, norm, rotX, rotY, rotZ, cross, dot, makeRng } from './math.js';
 
 export const JOINTS = ['rigid', 'revolute', 'twist', 'universal', 'bendtwist', 'twistbend', 'spherical'];
 // free rotational axes of each joint in the joint frame: 0 = twist (X, along
@@ -38,7 +40,7 @@ export const FN_NAMES = Object.keys(NEURON_FNS);
 export const NSENS = 17;
 
 export const SHAPES = ['box', 'capsule', 'sphere'];
-export const PLANS = ['free', 'bilateral', 'radial'];
+export const PLANS = ['free', 'bilateral', 'radial', 'snake', 'quadruped', 'insect', 'arachnid', 'crustacean', 'centipede', 'biped'];
 
 export const LIMITS = {
   dimMin: 0.1, dimMax: 1.0,
@@ -124,6 +126,7 @@ export function randNode(rng, opts) {
 }
 
 export function randomGenome(rng, opts) {
+  if (TEMPLATES[opts?.plan?.type]) return templateGenome(rng, opts);
   const nNodes = 1 + rng.int(4);
   const nodes = Array.from({ length: nNodes }, () => randNode(rng, opts));
   // the root tends to be the biggest block
@@ -300,7 +303,7 @@ const MIRROR_Z = A => A.map(c => [c[0], c[1], -c[2]]);
 export function develop(g, maxParts) {
   const parts = [];
   const nodes = g.nodes;
-  const plan = g.plan?.type || 'free';
+  const plan = TEMPLATES[g.plan?.type] ? 'bilateral' : g.plan?.type || 'free';
   const N = plan === 'radial' ? Math.max(2, g.plan.n || 5) : 1;
   const sym = plan !== 'free';
   const cap = maxParts ?? (sym ? LIMITS.maxPartsSym : LIMITS.maxParts);
@@ -316,7 +319,7 @@ export function develop(g, maxParts) {
     if (parts.length >= cap) { overflow = true; break; }
     const p = queue.shift();
     const nd = nodes[p.node];
-    const dims = nd.dims.map(x => Math.max(LIMITS.effMin, x * p.s));
+    const dims = nd.dims.map(x => Math.max(nd.minDim ?? LIMITS.effMin, x * p.s));
     let shape = nd.shape || 'box';
     const cyl = p.axisIdx;
     if (plan === 'radial' && p.onAxis) {
@@ -343,7 +346,7 @@ export function develop(g, maxParts) {
 
     const atLimit = p.counts[p.node] >= nd.recur;
     nd.conns.forEach((c, ci) => {
-      if (c.to < 0 || c.to >= nodes.length) return;
+      if (c.to < 0 || c.to >= nodes.length || c.off) return;
       if (c.terminal && !atLimit) return;
       if (p.counts[c.to] + 1 > nodes[c.to].recur) return;
       const counts = p.counts.slice(); counts[c.to]++;
@@ -416,7 +419,7 @@ export function develop(g, maxParts) {
 
 // Separating-axis test between two oriented boxes, slightly shrunk so that
 // touching faces don't count.
-function obbOverlap(a, b, shrink = 0.96) {
+export function obbOverlap(a, b, shrink = 0.96) {
   const ha = a.half.map(x => x * shrink), hb = b.half.map(x => x * shrink);
   const T = [b.center[0] - a.center[0], b.center[1] - a.center[1], b.center[2] - a.center[2]];
   const axes = [...a.R, ...b.R];
@@ -552,20 +555,23 @@ function countSites(g) {
 // at least one mutation always happens.
 export function mutate(g, rng, amount = 1.5, opts) {
   const rate = Math.min(0.5, amount / countSites(g));
+  const tpl = TEMPLATES[g.plan?.type];
   for (let tries = 0; tries < 50; tries++) {
     let n = 0;
     // 1. node internals
     for (const nd of g.nodes) n += mutateNode(rng, nd, rate, opts);
     // 2. new random node (connected below or garbage collected)
-    if (g.nodes.length < LIMITS.maxNodes && rng.chance(rate * 4)) {
+    if (!tpl && g.nodes.length < LIMITS.maxNodes && rng.chance(rate * 4)) {
       g.nodes.push(randNode(rng, opts));
       g.nodes[rng.int(g.nodes.length - 1)].conns.push({ ...randConnection(rng, g.nodes.length), to: g.nodes.length - 1 });
       n++;
     }
     // 3. connection parameters
     for (const nd of g.nodes) for (const c of nd.conns) n += mutateConn(rng, c, rate, g.nodes.length);
-    // 4. add / remove connections
-    for (const nd of g.nodes) {
+    // 4. add / remove connections (templates: switch an optional part on or off)
+    if (tpl) {
+      for (const nd of g.nodes) if (tpl.roles[nd.role]?.optional && rng.chance(rate * 2)) { nd.on = !nd.on; n++; }
+    } else for (const nd of g.nodes) {
       if (nd.conns.length < 6 && rng.chance(rate * 2)) { nd.conns.push(randConnection(rng, g.nodes.length)); n++; }
       if (nd.conns.length && rng.chance(rate * 2)) { nd.conns.splice(rng.int(nd.conns.length), 1); n++; }
     }
@@ -574,7 +580,7 @@ export function mutate(g, rng, amount = 1.5, opts) {
     if (n > 0) break;
   }
   // 5. garbage-collect nodes unreachable from the root
-  return gc(g);
+  return tpl ? conform(g) : gc(g);
 }
 
 // One guaranteed change to the body's structure, as opposed to the parameter
@@ -582,6 +588,7 @@ export function mutate(g, rng, amount = 1.5, opts) {
 // which a new part is ~2%. Without these, evolution keeps refining the
 // first body that worked.
 export function structural(g, rng, opts) {
+  if (TEMPLATES[g.plan?.type]) return templateStructural(g, rng, opts);
   const nodes = g.nodes;
   const pickNode = () => rng.int(nodes.length);
   const allConns = () => nodes.flatMap(nd => nd.conns);
@@ -700,12 +707,21 @@ export function crossover(a, b, rng) {
   }
   const g = { nodes, globals };
   if (a.plan) g.plan = { ...a.plan };
-  return gc(g);
+  // templates: both parents have the same nodes in the same order, so this
+  // swaps whole body regions
+  return TEMPLATES[g.plan?.type] ? conform(g) : gc(g);
 }
 
 // Grafting: the first parent is copied, one of its connections is redirected
 // to a random node of the second parent, whose nodes are appended.
 export function graft(a, b, rng) {
+  if (TEMPLATES[a.plan?.type]) {
+    // templates: one of the second parent's parts (its node: shape, joint,
+    // circuit and attachments) replaces the first parent's
+    const g = clone(a), i = rng.int(Math.min(g.nodes.length, b.nodes.length));
+    g.nodes[i] = clone(b.nodes[i]);
+    return conform(g);
+  }
   const g = clone(a);
   const off = g.nodes.length;
   for (const nd of b.nodes) {
@@ -725,4 +741,252 @@ export function graft(a, b, rng) {
     gc(g);
   }
   return g;
+}
+
+// ---------------------------------------------------------------- animal templates
+
+// A template fixes the graph: which parts there are, what each attaches to
+// and on which face, how many times a chain repeats, and which joints a part
+// may have. Evolution tunes everything within that: sizes (within each role's
+// range), joint types (from the role's list) and limits, attachment points
+// and angles (within ranges), chain lengths, the neural circuits, and whether
+// each optional part is there. After every mutation and mating, conform()
+// snaps the genome back onto its template.
+//
+// All templates are bilateral: the root lies on the midplane, parts attached
+// near it (head, tail, abdomen) stay on it, and the rest come in mirror pairs.
+// Each role's genome node develops as usual (develop()); an optional part
+// that is switched off has its connections marked off, and develop() skips
+// them with everything hanging from them.
+//
+// Frames: the root's X is forward, Y up, Z to the side. A child's X points
+// out of the face it hangs from (its length), so a chain grows from its far
+// face, 0. Faces: 0 +X, 1 -X, 2 +Y, 3 -Y, 4 +Z, 5 -Z. On a face, u and v
+// (-1..1) run along the next two axes: X faces (u = Y, v = Z), Y faces
+// (u = Z, v = X), Z faces (u = X, v = Y).
+//
+// Role fields: dims [x, y, z] ranges (m, before chain scaling), joints
+// allowed, recur range, optional, minDim (smallest developed edge, if not
+// LIMITS.effMin), conns: [{ to, face, u, v, rot: [twist, about Y, about Z],
+// scale, terminal, unless }], each value a number or a [lo, hi] range;
+// `unless`: the connection is off while that optional part is on.
+// ground: biped contest, the parts allowed to touch the ground.
+
+const ANY = JOINTS, MOVE = JOINTS.slice(1);
+const BEND = ['revolute', 'universal'];
+const LIMB = ['revolute', 'universal', 'bendtwist', 'twistbend', 'spherical'];
+const SEG = ['revolute', 'universal', 'twist', 'bendtwist', 'twistbend', 'spherical'];
+const FIXED = ['rigid'];
+const R0 = [[-0.3, 0.3], [-0.4, 0.4], [-0.4, 0.4]];
+// a chain: the part repeats from its own far end
+const chain = (to, scale = [0.75, 1], rot = [[-0.2, 0.2], [-0.3, 0.3], [-0.3, 0.3]]) => ({ to, face: 0, u: 0, v: 0, rot, scale });
+// a pair of limbs on the +Z side face (mirrored to -Z) at fore-aft position u, tilted down
+const sideLeg = (to, u, splay = [-0.3, 0.3], down = [0.1, 1]) => ({ to, face: 4, u: [u - 0.1, u + 0.1], v: [-0.8, 0.1], rot: [[-0.3, 0.3], down, splay], scale: [0.8, 1.2] });
+// five toes across a paw's front face, fanned outward (rotation about their Y
+// turns them toward the paw's +Y side) so they never cross
+const toes = to => [-0.8, -0.4, 0, 0.4, 0.8].map(v => ({ to, face: 5, u: [-0.3, 0.3], v: [v - 0.05, v + 0.05], rot: [[-0.05, 0.05], [0.3 * v - 0.03, 0.3 * v + 0.03], [-0.3, 0.3]], scale: 1 }));
+
+export const TEMPLATES = {
+  // a head and a body chain tapering into a tail
+  snake: { roles: {
+    head: { dims: [[0.15, 0.35], [0.08, 0.2], [0.1, 0.25]], joints: ANY, conns: [{ to: 'body', face: 1, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] }] },
+    body: { dims: [[0.2, 0.45], [0.06, 0.15], [0.08, 0.2]], joints: SEG, recur: [3, 8],
+      conns: [chain('body', [0.85, 1.02]), { ...chain('tail', [0.7, 1]), terminal: true }] },
+    tail: { dims: [[0.15, 0.4], [0.05, 0.12], [0.06, 0.16]], joints: SEG, recur: [1, 6], conns: [chain('tail', [0.7, 0.95])] },
+  } },
+  // a body on four legs (hip and knee joints), each ending in a paw with five
+  // toes; a head, maybe on a neck, maybe with a trunk; maybe a tail
+  quadruped: { roles: {
+    body: { dims: [[0.5, 1.0], [0.2, 0.45], [0.35, 0.6]], joints: ANY, conns: [
+      { to: 'neck', face: 0, u: [0, 0.8], v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [0, 0.9]], scale: [0.8, 1.2] },
+      { to: 'head', face: 0, u: [0, 0.6], v: 0, rot: R0, scale: [0.8, 1.2], unless: 'neck' },
+      { to: 'tail', face: 1, u: [0, 0.8], v: 0, rot: [[-0.3, 0.3], [-0.3, 0.3], [-0.6, 0.8]], scale: [0.8, 1.2] },
+      // legs hang from the underside near its edges, splayed outward only
+      { to: 'foreUpper', face: 3, u: [0.7, 0.95], v: [0.5, 0.9], rot: [[-0.2, 0.2], [-0.4, 0.4], [0, 0.4]], scale: [0.8, 1.2] },
+      { to: 'hindUpper', face: 3, u: [0.7, 0.95], v: [-0.9, -0.5], rot: [[-0.2, 0.2], [-0.4, 0.4], [0, 0.4]], scale: [0.8, 1.2] },
+    ] },
+    neck: { optional: true, dims: [[0.15, 0.5], [0.08, 0.2], [0.08, 0.2]], joints: MOVE,
+      conns: [{ to: 'head', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.3, 0.3], [-0.9, 0.2]], scale: [0.8, 1.2] }] },
+    head: { dims: [[0.15, 0.4], [0.12, 0.3], [0.12, 0.3]], joints: ANY,
+      conns: [{ to: 'trunk', face: 0, u: [-0.8, 0], v: 0, rot: [[-0.2, 0.2], [-0.3, 0.3], [-0.6, 0.2]], scale: [0.8, 1.2] }] },
+    trunk: { optional: true, dims: [[0.1, 0.25], [0.05, 0.12], [0.05, 0.12]], joints: SEG, recur: [2, 5],
+      conns: [chain('trunk', [0.75, 0.95], [[-0.2, 0.2], [-0.3, 0.3], [-0.4, 0.1]])] },
+    tail: { optional: true, dims: [[0.1, 0.3], [0.04, 0.12], [0.04, 0.12]], joints: SEG, recur: [2, 6], conns: [chain('tail')] },
+    foreUpper: { dims: [[0.2, 0.5], [0.08, 0.2], [0.08, 0.2]], joints: LIMB, conns: [{ to: 'foreLower', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.4, 0.4], [-0.1, 0.2]], scale: [0.8, 1.2] }] },
+    foreLower: { dims: [[0.2, 0.5], [0.06, 0.16], [0.06, 0.16]], joints: BEND, conns: [{ to: 'paw', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [-0.2, 0.2]], scale: 1 }] },
+    hindUpper: { dims: [[0.2, 0.5], [0.08, 0.2], [0.08, 0.2]], joints: LIMB, conns: [{ to: 'hindLower', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.4, 0.4], [-0.1, 0.2]], scale: [0.8, 1.2] }] },
+    hindLower: { dims: [[0.2, 0.5], [0.06, 0.16], [0.06, 0.16]], joints: BEND, conns: [{ to: 'paw', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [-0.2, 0.2]], scale: 1 }] },
+    // fused to the leg (the limb's joints are hip and knee), as are the toes
+    // spread across its front: jointed, they were light enough to make the
+    // solver gain energy
+    paw: { dims: [[0.05, 0.1], [0.18, 0.22], [0.12, 0.22]], joints: FIXED, conns: toes('toe') },
+    toe: { dims: [[0.06, 0.18], [0.025, 0.028], [0.025, 0.028]], joints: FIXED, minDim: 0.02, conns: [] },
+  } },
+  // a thorax with six one-joint legs, a head (antennae, mandibles) and an
+  // abdomen (stinger)
+  insect: { roles: {
+    thorax: { dims: [[0.25, 0.6], [0.12, 0.3], [0.15, 0.35]], joints: ANY, conns: [
+      { to: 'head', face: 0, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] },
+      { to: 'abdomen', face: 1, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] },
+      sideLeg('leg', 0.65, [0, 0.6]), sideLeg('leg', 0), sideLeg('leg', -0.65, [-0.6, 0]),
+    ] },
+    head: { dims: [[0.12, 0.3], [0.12, 0.3], [0.12, 0.3]], joints: ANY, conns: [
+      { to: 'antenna', face: 2, u: [0.4, 0.9], v: [0.2, 0.9], rot: [[-0.3, 0.3], [-1, -0.3], [-0.5, 0.5]], scale: 1 },
+      { to: 'mandible', face: 0, u: [-0.9, -0.3], v: [0.4, 0.9], rot: [[-0.3, 0.3], [-0.5, 0.5], [-0.5, 0.5]], scale: 1 },
+    ] },
+    antenna: { optional: true, dims: [[0.12, 0.35], [0.03, 0.06], [0.03, 0.06]], joints: MOVE, recur: [1, 3], minDim: 0.03, conns: [chain('antenna', [0.7, 1])] },
+    mandible: { optional: true, dims: [[0.08, 0.2], [0.04, 0.08], [0.04, 0.08]], joints: BEND, minDim: 0.03, conns: [] },
+    leg: { dims: [[0.3, 0.7], [0.05, 0.12], [0.05, 0.12]], joints: LIMB, conns: [] },
+    abdomen: { dims: [[0.3, 0.8], [0.15, 0.35], [0.15, 0.4]], joints: ANY,
+      conns: [{ to: 'stinger', face: 0, u: [-0.5, 0.5], v: 0, rot: R0, scale: 1 }] },
+    stinger: { optional: true, dims: [[0.08, 0.2], [0.03, 0.06], [0.03, 0.06]], joints: MOVE, minDim: 0.03, conns: [] },
+  } },
+  // a body with eight one-joint legs, maybe pincers on the front pair; a head
+  // (mandibles); maybe a tail with a stinger
+  arachnid: { roles: {
+    body: { dims: [[0.3, 0.7], [0.15, 0.3], [0.3, 0.6]], joints: ANY, conns: [
+      { to: 'head', face: 0, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] },
+      sideLeg('frontLeg', 0.75, [0.2, 0.8]), sideLeg('leg', 0.25, [0, 0.4]), sideLeg('leg', -0.2, [-0.4, 0]), sideLeg('leg', -0.65, [-0.8, -0.2]),
+      { to: 'tail', face: 1, u: [0, 0.8], v: 0, rot: [[-0.3, 0.3], [-0.3, 0.3], [0, 0.8]], scale: [0.8, 1.2] },
+    ] },
+    head: { dims: [[0.12, 0.3], [0.1, 0.25], [0.12, 0.3]], joints: ANY,
+      conns: [{ to: 'mandible', face: 0, u: [-0.9, -0.3], v: [0.4, 0.9], rot: [[-0.3, 0.3], [-0.5, 0.5], [-0.5, 0.5]], scale: 1 }] },
+    mandible: { optional: true, dims: [[0.08, 0.2], [0.04, 0.08], [0.04, 0.08]], joints: BEND, minDim: 0.03, conns: [] },
+    frontLeg: { dims: [[0.3, 0.7], [0.05, 0.12], [0.05, 0.12]], joints: LIMB,
+      conns: [{ to: 'pincer', face: 0, u: 0, v: 0, rot: R0, scale: 1 }] },
+    pincer: { optional: true, dims: [[0.1, 0.25], [0.08, 0.15], [0.04, 0.08]], joints: BEND, conns: [] },
+    leg: { dims: [[0.3, 0.7], [0.05, 0.12], [0.05, 0.12]], joints: LIMB, conns: [] },
+    tail: { optional: true, dims: [[0.1, 0.25], [0.06, 0.14], [0.06, 0.14]], joints: SEG, recur: [2, 6],
+      conns: [chain('tail', [0.8, 1], [[-0.2, 0.2], [-0.3, 0.3], [0, 0.6]]), { to: 'stinger', face: 0, u: 0, v: 0, rot: R0, scale: 1, terminal: true }] },
+    stinger: { optional: true, dims: [[0.08, 0.2], [0.03, 0.06], [0.03, 0.06]], joints: MOVE, minDim: 0.03, conns: [] },
+  } },
+  // a carapace with ten one-joint legs, the front pair ending in pincers; a
+  // head with antennae; maybe a segmented tail
+  crustacean: { roles: {
+    carapace: { dims: [[0.35, 0.8], [0.15, 0.3], [0.3, 0.6]], joints: ANY, conns: [
+      { to: 'head', face: 0, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] },
+      sideLeg('claw', 0.8, [0.3, 0.9], [-0.2, 0.6]), sideLeg('leg', 0.4, [0, 0.4]), sideLeg('leg', 0, [-0.2, 0.2]),
+      sideLeg('leg', -0.4, [-0.4, 0]), sideLeg('leg', -0.8, [-0.8, -0.2]),
+      { to: 'tail', face: 1, u: [-0.3, 0.5], v: 0, rot: [[-0.2, 0.2], [-0.3, 0.3], [-0.4, 0.4]], scale: [0.8, 1.2] },
+    ] },
+    head: { dims: [[0.1, 0.25], [0.1, 0.22], [0.12, 0.3]], joints: ANY,
+      conns: [{ to: 'antenna', face: 0, u: [0, 0.8], v: [0.4, 0.9], rot: [[-0.3, 0.3], [-0.6, 0.2], [0, 0.8]], scale: 1 }] },
+    antenna: { dims: [[0.15, 0.4], [0.03, 0.06], [0.03, 0.06]], joints: MOVE, recur: [1, 4], minDim: 0.03, conns: [chain('antenna', [0.7, 1])] },
+    claw: { dims: [[0.25, 0.55], [0.06, 0.14], [0.06, 0.14]], joints: LIMB,
+      conns: [{ to: 'pincer', face: 0, u: 0, v: 0, rot: R0, scale: 1 }] },
+    pincer: { dims: [[0.12, 0.3], [0.1, 0.2], [0.05, 0.1]], joints: BEND, conns: [] },
+    leg: { dims: [[0.25, 0.6], [0.04, 0.1], [0.04, 0.1]], joints: LIMB, conns: [] },
+    tail: { optional: true, dims: [[0.12, 0.3], [0.08, 0.2], [0.15, 0.4]], joints: SEG, recur: [2, 6],
+      conns: [chain('tail', [0.8, 0.98], [[-0.1, 0.1], [-0.2, 0.2], [-0.3, 0.3]])] },
+  } },
+  // a head (maybe pincers) and a chain of segments, a pair of one-joint legs on each
+  centipede: { roles: {
+    head: { dims: [[0.15, 0.35], [0.1, 0.25], [0.15, 0.35]], joints: ANY, conns: [
+      { to: 'segment', face: 1, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] },
+      { to: 'pincer', face: 0, u: [-0.8, -0.2], v: [0.4, 0.9], rot: [[-0.3, 0.3], [-0.5, 0.5], [-0.5, 0.5]], scale: 1 },
+    ] },
+    pincer: { optional: true, dims: [[0.08, 0.2], [0.04, 0.08], [0.04, 0.08]], joints: BEND, minDim: 0.03, conns: [] },
+    segment: { dims: [[0.15, 0.3], [0.08, 0.18], [0.15, 0.35]], joints: SEG, recur: [3, 8],
+      conns: [chain('segment', [0.9, 1.05]), { to: 'leg', face: 4, u: [-0.3, 0.3], v: [-0.8, 0.1], rot: [[-0.3, 0.3], [0.1, 1], [-0.4, 0.4]], scale: 1 }] },
+    leg: { dims: [[0.15, 0.4], [0.04, 0.08], [0.04, 0.08]], joints: LIMB, conns: [] },
+  } },
+  // an upright torso on two legs (hip, knee, ankle); maybe a head, arms and a tail
+  biped: { roles: {
+    torso: { dims: [[0.15, 0.35], [0.3, 0.7], [0.25, 0.5]], joints: ANY, conns: [
+      { to: 'head', face: 2, u: 0, v: [-0.3, 0.3], rot: R0, scale: [0.8, 1.2] },
+      { to: 'upperArm', face: 4, u: [-0.3, 0.3], v: [0.4, 0.9], rot: [[-0.3, 0.3], [0.5, 1], [-0.4, 0.4]], scale: [0.8, 1.2] },
+      { to: 'thigh', face: 3, u: [0.4, 0.9], v: [-0.3, 0.3], rot: [[-0.2, 0.2], [-0.3, 0.3], [-0.3, 0.3]], scale: [0.8, 1.2] },
+      { to: 'tail', face: 1, u: [-0.9, -0.2], v: 0, rot: [[-0.3, 0.3], [-0.3, 0.3], [-0.9, -0.1]], scale: [0.8, 1.2] },
+    ] },
+    head: { optional: true, dims: [[0.15, 0.3], [0.15, 0.3], [0.15, 0.3]], joints: ANY, conns: [] },
+    upperArm: { optional: true, dims: [[0.2, 0.45], [0.06, 0.12], [0.06, 0.12]], joints: LIMB,
+      conns: [{ to: 'forearm', face: 0, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] }] },
+    forearm: { dims: [[0.2, 0.45], [0.05, 0.1], [0.05, 0.1]], joints: BEND, conns: [] },
+    thigh: { dims: [[0.25, 0.55], [0.08, 0.18], [0.08, 0.18]], joints: LIMB, conns: [{ to: 'shin', face: 0, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] }] },
+    shin: { dims: [[0.25, 0.55], [0.07, 0.16], [0.07, 0.16]], joints: BEND, conns: [{ to: 'foot', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [-0.2, 0.2]], scale: 1 }] },
+    // X down (thickness), Y across, Z along: the foot lies flat under the shin
+    foot: { dims: [[0.05, 0.12], [0.1, 0.25], [0.2, 0.45]], joints: ['rigid', 'revolute', 'universal'], ground: true, conns: [] },
+    tail: { optional: true, dims: [[0.12, 0.35], [0.05, 0.14], [0.05, 0.14]], joints: SEG, recur: [1, 5], ground: true, conns: [chain('tail')] },
+  } },
+};
+// role order = node order; the first role is the root
+for (const t of Object.values(TEMPLATES)) t.order = Object.keys(t.roles);
+
+const pickIn = (rng, r) => (Array.isArray(r) ? rng.range(r[0], r[1]) : r);
+const clampIn = (x, r) => (Array.isArray(r) ? clamp(x, r[0], r[1]) : r);
+const rangeOf = r => (Array.isArray(r) ? r : [r, r]);
+
+// Snap a template genome back onto its template: node count and order, each
+// node's role, size ranges, allowed joints and chain lengths, and its
+// connections (targets, faces and flags fixed; positions, angles and scales
+// clamped into range). Nodes keep their circuits and evolved values.
+export function conform(g) {
+  const tpl = TEMPLATES[g.plan.type];
+  const idx = new Map(tpl.order.map((r, i) => [r, i]));
+  g.nodes.length = Math.min(g.nodes.length, tpl.order.length);
+  tpl.order.forEach((role, i) => {
+    const spec = tpl.roles[role];
+    const nd = g.nodes[i] ??= randNode(makeRng(i + 1), {});   // (only a damaged genome is short)
+    nd.role = role;
+    nd.on = spec.optional ? nd.on !== false : true;
+    if (spec.minDim) nd.minDim = spec.minDim; else delete nd.minDim;
+    nd.dims = nd.dims.map((x, k) => clampIn(x, spec.dims[k]));
+    if (!spec.joints.includes(nd.joint)) nd.joint = spec.joints[Math.max(0, JOINTS.indexOf(nd.joint)) % spec.joints.length];
+    nd.recur = Math.round(clampIn(nd.recur, spec.recur || 1));
+    nd.conns = spec.conns.map((cs, j) => {
+      const c = nd.conns[j] || {};
+      const rot = (c.rot || [0, 0, 0]).map((x, k) => clampIn(x, (cs.rot || R0)[k]));
+      return { to: idx.get(cs.to), face: cs.face, u: clampIn(c.u ?? 0, cs.u), v: clampIn(c.v ?? 0, cs.v), rot,
+        scale: clampIn(c.scale ?? 1, cs.scale), reflect: -1, terminal: !!cs.terminal };
+    });
+  });
+  // connections into a part that's off, or that give way to one that's on
+  tpl.order.forEach((role, i) => tpl.roles[role].conns.forEach((cs, j) => {
+    const c = g.nodes[i].conns[j];
+    c.off = !g.nodes[c.to].on || (cs.unless !== undefined && g.nodes[idx.get(cs.unless)].on);
+    if (!c.off) delete c.off;
+  }));
+  return g;
+}
+
+function templateGenome(rng, opts) {
+  const tpl = TEMPLATES[opts.plan.type];
+  const nodes = tpl.order.map(role => {
+    const spec = tpl.roles[role], nd = randNode(rng, opts);
+    nd.dims = spec.dims.map(r => Math.exp(rng.range(Math.log(r[0]), Math.log(r[1]))));
+    nd.joint = rng.pick(spec.joints);
+    const rr = rangeOf(spec.recur || 1);
+    nd.recur = rr[0] + rng.int(rr[1] - rr[0] + 1);
+    if (spec.optional) nd.on = rng.chance(0.5);
+    nd.conns = spec.conns.map(cs => ({
+      u: pickIn(rng, cs.u), v: pickIn(rng, cs.v), scale: pickIn(rng, cs.scale),
+      rot: (cs.rot || R0).map(r => pickIn(rng, r)),
+    }));
+    if (nd.recur > 1 && rng.chance(0.5)) addWave(nd, rng);
+    return nd;
+  });
+  const g = { nodes, globals: Array.from({ length: rng.int(3) }, () => randNeuron(rng, 'global')), plan: { ...opts.plan } };
+  return conform(g);
+}
+
+// One structural change that keeps the template: a part switched on or off,
+// a chain longer or shorter, a different joint, a part much longer or
+// thinner, an attachment moved within its range, or a travelling wave.
+function templateStructural(g, rng, opts) {
+  const tpl = TEMPLATES[g.plan.type];
+  const roleOf = nd => tpl.roles[nd.role];
+  const ops = [
+    () => { const os = g.nodes.filter(nd => roleOf(nd).optional); if (!os.length) return false; const nd = rng.pick(os); nd.on = !nd.on; return true; },
+    () => { const cs = g.nodes.filter(nd => roleOf(nd).recur); if (!cs.length) return false; const nd = rng.pick(cs); nd.recur += rng.chance(0.5) ? 1 : -1; return true; },
+    () => { const nd = rng.pick(g.nodes); if (roleOf(nd).joints.length < 2) return false; nd.joint = rng.pick(roleOf(nd).joints); return true; },
+    () => { const nd = rng.pick(g.nodes); const k = rng.int(3); nd.dims[k] *= rng.chance(0.5) ? 1.6 : 0.6; return true; },
+    () => {
+      const nd = rng.pick(g.nodes); if (!nd.conns.length) return false;
+      const j = rng.int(nd.conns.length), cs = roleOf(nd).conns[j];
+      nd.conns[j].u = pickIn(rng, cs.u); nd.conns[j].v = pickIn(rng, cs.v); return true;
+    },
+    () => { const cs = g.nodes.filter(nd => nd.recur > 1); return cs.length ? addWave(rng.pick(cs), rng) : false; },
+  ];
+  for (let tries = 0; tries < 10; tries++) if (rng.pick(ops)()) break;
+  return conform(g);
 }

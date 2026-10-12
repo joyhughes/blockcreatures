@@ -6,7 +6,7 @@ import { makeRng } from './math.js';
 import { Recorder } from './record.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', biped: 'm/s' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -42,6 +42,7 @@ function setTask(key) {
   for (const b of $('tasks').children) b.classList.toggle('on', b.dataset.task === key);
   $('sUnit').textContent = 'best ' + UNITS[TASKS[key].kind];
   view.setEnv(TASKS[key].env);
+  showPlan();
   switchRun();
 }
 
@@ -103,18 +104,27 @@ const PLAN_NOTES = {
   free: 'Sims\' original genotype: any shape, with optional per-connection reflection.',
   bilateral: 'Mirror-symmetric about the midplane. Attachments near the plane stay on it; others come in left/right pairs. Each side senses which side it is on (+1 / −1), so the two can move in antiphase.',
   radial: 'N-fold symmetric about the vertical axis. Parts on the axis become cylinders; other attachments are repeated around it. Each arm senses its position (2k/N), so the arms can beat in a travelling wave.',
+  snake: 'Animal template: a head and a body chain (3–8 segments) tapering into a tail. Templates fix which parts there are and how they attach; evolution tunes their sizes, joints, chain lengths, attachment points and brains.',
+  quadruped: 'Animal template: a body on four legs, each with a hip and a knee and ending in a paw with five toes; a head, with an optional neck and trunk; an optional tail. Evolution tunes sizes, joints, attachment points and brains, and switches the optional parts on and off.',
+  insect: 'Animal template: a thorax with six one-joint legs, a head with optional antennae and mandibles, and an abdomen with an optional stinger.',
+  arachnid: 'Animal template: a body with eight one-joint legs (optional pincers on the front pair), a head with optional mandibles, and an optional tail with a stinger.',
+  crustacean: 'Animal template: a carapace with ten one-joint legs, the front pair ending in pincers; a head with antennae; an optional segmented tail.',
+  centipede: 'Animal template: a head with optional pincers and a chain of 3–8 segments with a pair of one-joint legs on each.',
+  biped: 'Animal template: an upright torso on two legs (hip, knee and ankle), with an optional head, arms and tail. The Biped walking target always uses it.',
 };
+// a target that needs one body plan (biped walking) uses it whatever is picked
+const effPlan = () => TASKS[task].plan || planType;
 function body() {
-  const plan = planType === 'radial' ? { type: 'radial', n: +$('radialN').value } : { type: planType };
+  const plan = effPlan() === 'radial' ? { type: 'radial', n: +$('radialN').value } : { type: effPlan() };
   return { plan, round: $('round').checked, minArm: +$('minArm').value };
 }
 function showPlan() {
-  for (const b of $('plan').children) b.classList.toggle('on', b.dataset.plan === planType);
-  $('nWrap').hidden = planType !== 'radial';
-  $('planNote').textContent = PLAN_NOTES[planType] + ($('round').checked ? ' Round parts: genes may choose capsules or spheres; capsules lie along the attachment axis, so recursive chains taper into tentacles.' : '')
+  for (const b of $('plan').children) b.classList.toggle('on', b.dataset.plan === effPlan());
+  $('nWrap').hidden = effPlan() !== 'radial';
+  $('planNote').textContent = PLAN_NOTES[effPlan()] + ($('round').checked ? ' Round parts: genes may choose capsules or spheres; capsules lie along the attachment axis, so recursive chains taper into tentacles.' : '')
     + (+$('minArm').value ? ` Min arm: only creatures with an appendage of at least ${$('minArm').value} segments are viable.` : '');
 }
-for (const b of $('plan').children) b.onclick = () => { if (running) return; planType = b.dataset.plan; showPlan(); switchRun(); };
+for (const b of $('plan').children) b.onclick = () => { if (running || TASKS[task].plan) return; planType = b.dataset.plan; showPlan(); switchRun(); };
 $('radialN').onchange = $('round').onchange = $('minArm').onchange = () => { if (running) return; showPlan(); switchRun(); };
 const setBodyEnabled = on => { for (const el of [...$('plan').children, $('radialN'), $('round'), $('minArm'), $('islands'), $('teams')]) el.disabled = !on; };
 
@@ -736,6 +746,7 @@ function hudText(finalFit) {
   if (sim.coop) s += sim.scored !== null ? ` · GOAL at ${sim.scored.toFixed(1)}s` : sim.tStart !== null ? ` · ball ${sim.ballToGoal().toFixed(2)} m from the goal` : '';
   if (sim.lift && sim.cube && sim.tStart !== null) s += ` · weight ${Math.max(0, sim.cube.translation().y - sim.ballR).toFixed(2)} m up`;
   if (sim.statics && sim.tStart !== null && sim.creatures[0].valid) s += ` · lowest part ${Math.max(0, sim.creatures[0].lowest()).toFixed(2)} m up`;
+  if (T.kind === 'biped' && sim.track[0]) { const f = sim.track[0].fell; s += f === undefined ? ' · upright' : f < T.settle ? ' · fell while settling' : ` · fell at ${(f - T.settle).toFixed(1)}s`; }
   if (sim.volley && sim.tStart !== null) s += ` · ${sim.passes} pass${sim.passes === 1 ? '' : 'es'}`;
   if (sim.coop && sim.scene.together > 0 && sim.playSteps) s += ` · both on it ${Math.round(100 * sim.bothSteps / sim.playSteps)}%`;
   if (finalFit !== undefined) s += ` · this trial ${finalFit.toFixed(3)} ${UNITS[T.kind]}`;

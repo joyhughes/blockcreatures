@@ -16,6 +16,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Volley (beyond Sims) | land, two creatures facing each other across a light ball | one shared score: the number of passes (the ball travels ≥ 0.5 m between one creature's touch and the other's), plus up to 0.75 before the first for touching it and closing on it |
 | Wrestling (beyond Sims) | land, two same-size creatures face to face, no ball | sumo: 1 + (how far the opponent's centre of mass ever got outside a 2 m ring − how far mine did) / 1 m + 0.5 × (its mean distance from the middle − mine) / 2 m, capped to 0–2, + 0.5 × the share of the bout the two are in contact; all vs. best like competition |
 | Stairs (beyond Sims) | land, a pit at the bottom of a square stepped amphitheatre (12 steps of 0.15 × 0.4 m) | metres climbed: ½ the centre of mass's rise + ½ the lowest part's final height |
+| Biped walking (beyond Sims) | land, the biped template | as walking, up to the first time any part but a foot or the tail touches the ground, + 0.1 × the share of the time it stayed up |
 | Lifting (beyond Sims) | land, a barbell (a 1.2 m bar between two square 0.4 m plates, 0.3 kg; the bar 0.2 m off the ground) beside the creature | the barbell's height off the ground averaged over the last second, + up to 0.2 for closing on it |
 
 ### Falling over: Sims' rules
@@ -96,6 +97,41 @@ Symmetric bodies may have up to 40 parts and are rejected rather than
 truncated past that, since truncation would break the symmetry.
 `tools/symtest.mjs` checks that every developed body is exactly symmetric, and
 `tools/symdyn.mjs` that twins move as mirror or rotated images.
+
+**Animal templates**: *Snake*, *Quadruped*, *Insect*, *Arachnid*,
+*Crustacean*, *Centipede* and *Biped* are bilateral body plans whose genome graph is fixed
+(`TEMPLATES` in `src/genome.js`). Each node has a role, and the role fixes
+what the node attaches to, on which face, how often a chain may repeat
+(within a range), which joints it may have, and the range of its size.
+Evolution tunes everything inside that: sizes, joint types and limits,
+attachment points and angles (within ranges), chain lengths and brains.
+It also switches optional parts on and off: a part that is off has its
+connections skipped, with everything hanging from it. After every mutation
+and mating the genome is snapped back onto its template. Plain mutation
+never adds or removes parts, and crossover lines up the two parents'
+matching roles. Grafting swaps one role's node for the other parent's.
+
+| Template | Parts |
+|---|---|
+| Snake | head; body chain of 3–8 segments, ending in a tail chain of 1–6 |
+| Quadruped | body; four legs with hip and knee, each ending in a paw (fused) with five toes; head, optional neck and trunk (2–5 segments); optional tail (2–6) |
+| Insect | thorax with six one-joint legs; head with optional antennae (1–3 segments) and mandibles; abdomen with optional stinger |
+| Arachnid | body with eight one-joint legs, optional pincers on the front pair; head with optional mandibles; optional tail (2–6) with stinger |
+| Crustacean | carapace with ten one-joint legs, the front pair ending in pincers; head with antennae (1–4 segments); optional segmented tail (2–6) |
+| Centipede | head with optional pincers; 3–8 segments with two one-joint legs each |
+| Biped | upright torso; two legs with hip, knee and ankle, ending in a flat foot; optional head, two-joint arms and tail (1–5) |
+
+The quadruped's toes are fused to the paw. Jointed, they were light enough
+for the solver to gain energy, and one in eight random quadrupeds failed the
+energy audit. Toes fan outward so neighbours never cross.
+
+**Biped walking** (target): uses the biped template whatever plan is picked.
+Only the feet and the tail may touch the ground. Any other part touching it
+is a fall, and the walk ends there. Settling is timed with the brain on, so
+the creature can stand up. Scoring is the walking score up to the fall
+(half max distance / T, half the last third's distance / (T/3)), plus
+0.1 × the share of the time it stayed up, settling included. Random bipeds
+all fall within half a second, so standing longer is the first thing to evolve.
 
 **Evolution stays within a body plan.** Every target and body plan (arm
 count and round-parts setting included) has its own run in the app. Switching
@@ -406,7 +442,7 @@ Tasks: `swim walk jump followWater followLand compete cooperate`. Env: `ISLANDS=
 species; team B's history is saved as `rivalHistory`); e.g.
 `MIN_ARM=4 node tools/evolve.mjs swim 150 300 1 radial8 round`. Body plans for the
 headless runner: `node tools/evolve.mjs walk 150 300 1 bilateral round` (plan
-`free | bilateral | radialN`, then `round` to allow capsules and spheres;
+`free | bilateral | radialN | snake | quadruped | insect | arachnid | crustacean | centipede | biped`, then `round` to allow capsules and spheres;
 `SEED_FROM=examples/tentacles.json` starts from mutants of a creature).
 
 ## Bundled champions

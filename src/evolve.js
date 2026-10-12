@@ -18,7 +18,7 @@
 // limb, a duplicated segment, a chain, a moved attachment, ...), where plain
 // mutation is almost all parameter tweaks.
 
-import { randomGenome, mutate, structural, descriptor, crossover, graft, clone, develop, interpenetrates, tooBig, armLength, growArm, JOINT_DOFS } from './genome.js';
+import { TEMPLATES, randomGenome, mutate, structural, descriptor, crossover, graft, clone, develop, interpenetrates, tooBig, armLength, growArm, JOINT_DOFS } from './genome.js';
 import { makeRng } from './math.js';
 import { TASKS } from './sim.js';
 
@@ -85,7 +85,7 @@ export class Evolver {
   // grown onto those that don't.
   withArm(g) {
     const k = this.body.minArm;
-    if (k && armLength(develop(g).parts) < k) growArm(g, this.rng, k + this.rng.int(3), this.body);
+    if (k && !TEMPLATES[g.plan?.type] && armLength(develop(g).parts) < k) growArm(g, this.rng, k + this.rng.int(3), this.body);
     return g;
   }
 

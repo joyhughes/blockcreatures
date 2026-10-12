@@ -1,5 +1,6 @@
 // Headless evolution: node tools/evolve.mjs <task> [generations] [popSize] [seed] [plan] [round]
-//   plan: free | bilateral | radialN (e.g. radial5); round: round = allow capsules/spheres
+//   plan: free | bilateral | radialN (e.g. radial5) | snake | quadruped | insect | arachnid | crustacean | centipede | biped;
+//   round: round = allow capsules/spheres
 // Env: ISLANDS=K sub-populations (default 6; 1 = Sims' single population),
 //      NOVELTY=w weight of body novelty in selection (default 0.3),
 //      STRUCT=p share of mutants given a structural change (default 0.25),
