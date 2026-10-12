@@ -118,6 +118,7 @@ const BALL_ROLL = 0.02;
 const APART = 50;   // settling apart: each creature this far to the side (m)
 const WRESTLE_SCALE = 1;   // wrestling: pushed back this much further (m) than the other is a full loss
 const STAIR_MARGIN = 0.3;   // stairs: the pit reaches this far (m) past the creature's widest point
+const STAIR_TOP = 10;   // stairs: the top step is a plateau this wide (m), so climbing over it can't fall off the far side
 const LIFT_GAP = 0.3;   // lifting: the cube starts this far (m) beyond the creature's furthest point in +x
 const LIFT_HOLD = 1;   // lifting: the cube's height is averaged over the last this many seconds
 const PASS_MIN = 0.5;   // volley: the ball travels at least this far (m) between the two creatures' touches
@@ -739,20 +740,25 @@ export class Sim {
 
   // stairs: square rings stacked into an amphitheatre around a pit that
   // clears the creature's widest point by STAIR_MARGIN. Step k is a ring of
-  // four boxes from its inner edge out to the edge of the whole flight.
+  // four boxes from its inner edge out to the edge of the flight; beyond it,
+  // a solid ring as high as the top step makes a STAIR_TOP plateau. (Stretching
+  // the step boxes out to the plateau's edge instead made Rapier's contacts
+  // on them worse: a champion's energy spikes went from 1.7 J to 17 J.)
   buildStairs() {
     const c = this.creatures[0], sc = this.scene;
     if (!c.valid) return;
     const r0 = Math.max(...[[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]].map(w => -c.minAlong(w))) + STAIR_MARGIN;
     const h = sc.stepHeight, d = sc.stepDepth, R = r0 + sc.steps * d;
     this.statics = []; this.staticCols = [];
-    for (let k = 0; k < sc.steps; k++) {
-      const a = r0 + k * d, w = (R - a) / 2, y = (k + 0.5) * h;
-      for (const [cx, cz, hx, hz] of [[a + w, 0, w, R], [-a - w, 0, w, R], [0, a + w, a, w], [0, -a - w, a, w]]) {
-        this.statics.push({ c: [cx, y, cz], h: [hx, h / 2, hz] });
-        this.staticCols.push(this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, h / 2, hz).setTranslation(cx, y, cz).setFriction(this.relaxing ? 0 : sc.friction)));
+    const ring = (a, b, y0, y1) => {   // a square ring from a to b out, between heights y0 and y1
+      const w = (b - a) / 2, y = (y0 + y1) / 2, hy = (y1 - y0) / 2;
+      for (const [cx, cz, hx, hz] of [[a + w, 0, w, b], [-a - w, 0, w, b], [0, a + w, a, w], [0, -a - w, a, w]]) {
+        this.statics.push({ c: [cx, y, cz], h: [hx, hy, hz] });
+        this.staticCols.push(this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(cx, y, cz).setFriction(this.relaxing ? 0 : sc.friction)));
       }
-    }
+    };
+    for (let k = 0; k < sc.steps; k++) ring(r0 + k * d, R, k * h, (k + 1) * h);
+    ring(R, R + STAIR_TOP, 0, sc.steps * h);
   }
 
   // competition: move each contestant toward the ball until it touches the

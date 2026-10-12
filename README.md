@@ -250,7 +250,9 @@ with Teams.
 **Stairs**: the creature starts in a pit at the bottom of a square stepped
 amphitheatre, so it can climb in any direction. The pit clears the
 creature's widest point by 0.3 m; **Step height**, **Step depth** and
-**Steps** are in the scene panel (0.15 m, 0.4 m, 12). The score is half the
+**Steps** are in the scene panel (0.15 m, 0.4 m, 12). The top step is a
+10 m plateau, so a creature that climbs over the top stays up there rather
+than falling off the far side. The score is half the
 centre of mass's rise plus half the lowest part's final height: standing up
 tall earns a little, and every part has to get up the steps to earn the
 rest. The HUD shows the lowest part's height.
