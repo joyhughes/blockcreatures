@@ -48,6 +48,10 @@ export const TASKS = {
   // the goal: progress toward it, or 1 + the share of time left on scoring
   cooperate: { label: 'Cooperation', env: 'land', duration: 15, settle: 0.5, trials: 1, kind: 'cooperate', pair: true,
     scene: { ballSize: 0.35, ballMass: 0.6 } },
+  // facing each other across a light ball, they share one score: how many
+  // times they pass it back and forth
+  volley: { label: 'Volley', env: 'land', duration: 20, settle: 0.5, trials: 1, kind: 'volley', pair: true,
+    scene: { ballSize: 0.25, ballMass: 0.15, gap: 1.5, duration: 20 } },
 };
 
 // Scene parameters, adjustable per run (the UI's Scene section). A run's
@@ -90,7 +94,7 @@ export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
   const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false };
-  const legacy = TASKS[taskName].kind === 'cooperate' ? {} : LEGACY_SCENE;
+  const legacy = TASKS[taskName].kind === 'cooperate' || TASKS[taskName].kind === 'volley' ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
   return s;
@@ -99,6 +103,7 @@ const RELAX_STILL = 0.5;   // stable: the centre of mass hasn't dropped for this
 const RELAX_MIN = 0.3, RELAX_MAX = 5;   // ... but at least / at most this long
 const BALL_ROLL = 0.02;
 const APART = 50;   // settling apart: each creature this far to the side (m)
+const PASS_MIN = 0.5;   // volley: the ball travels at least this far (m) between the two creatures' touches
 const COOP_SPACING = 0.5;   // cooperation: gap between the two creatures at the start (m)    // rolling resistance of the ball: it rolls far, but stops
 
 const yawQuat = a => ({ x: 0, y: Math.sin(a / 2), z: 0, w: Math.cos(a / 2) });
@@ -647,6 +652,9 @@ export class Sim {
     const copts = { friction: this.relaxing ? 0 : sc.friction, drag: sc.drag, groundHandle: this.groundHandle };
     if (task.pair) {
       const coop = this.coop = task.kind === 'cooperate';
+      // volley: passes so far; who touched the ball last, and where it was
+      // when they last touched it; whether each has touched it at all
+      if ((this.volley = task.kind === 'volley')) Object.assign(this, { passes: 0, lastTouch: -1, lastPos: null, touched: [false, false] });
       const r = this.ballR = sc.ballSize, sphere = this.ballSphere = sc.ball === 'sphere';
       const vol = sphere ? 4 / 3 * Math.PI * r ** 3 : 8 * r ** 3;
       const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, r, 0).setCanSleep(false));
@@ -780,6 +788,7 @@ export class Sim {
       if (this.tStart !== null && this.t >= this.tStart) this.trackStep(i);
     }
     if (this.tStart === null) this.relaxStep();
+    if (this.volley && this.tStart !== null && this.t >= this.tStart) this.volleyStep();
     // cooperation: how long both touch the ball at once, until the game ends
     if (this.coop && this.tStart !== null && this.t >= this.tStart && this.scored === null) {
       this.playSteps++;
@@ -887,11 +896,25 @@ export class Sim {
       const d = len(sub(c.com(), this.light));
       if (tr.start === null) tr.start = d;
       tr.last = d;
-    } else if (task.kind === 'cooperate') {
+    } else if (task.kind === 'cooperate' || task.kind === 'volley') {
       const d = c.distanceTo(this.cubePos());
       if (tr.start === null) tr.start = d;
       tr.last = d;
     }
+  }
+
+  // volley: a pass is a touch by one creature after the other's, with the
+  // ball at least PASS_MIN from where it was when the other last touched it.
+  // Both on the ball at once is a scrum: the next touch isn't a pass.
+  volleyStep() {
+    const cs = this.creatures, b = this.cubePos();
+    const on = cs.map((c, i) => c.valid && !this.failed[i] && this.touching(c));
+    on.forEach((x, i) => { if (x) this.touched[i] = true; });
+    if (on[0] && on[1]) { this.lastTouch = -1; this.lastPos = b; return; }
+    if (!on[0] && !on[1]) return;
+    const i = on[0] ? 0 : 1;
+    if (this.lastTouch === 1 - i && Math.hypot(b[0] - this.lastPos[0], b[2] - this.lastPos[2]) >= PASS_MIN) this.passes++;
+    this.lastTouch = i; this.lastPos = b;
   }
 
   // cooperation: horizontal distance from the ball's centre to the goal's
@@ -918,6 +941,17 @@ export class Sim {
       const w = clamp(sc.together || 0), both = this.bothSteps / Math.max(1, this.playSteps);
       const f = this.scored !== null ? 1 + (1 - w) * Math.max(0, 1 - this.scored / T) + w * both
         : (1 - w) * (0.8 * clamp((sc.goalDist - this.ballToGoal()) / Math.max(0.01, sc.goalDist - sc.goalSize)) + 0.2 * near) + w * both;
+      return cs.map(() => f);
+    }
+    if (this.volley) {
+      // shared: one point a pass; before the first, up to 0.75 for getting
+      // there: 0.25 for each creature that touched the ball and 0.25 x the
+      // share of their distance to it the two closed on average
+      const cs = this.creatures;
+      if (cs.every(c => !c.valid) || cs.some((c, i) => c.valid && this.failed[i])) return cs.map(() => 0);
+      const live = cs.map((c, i) => this.track[i]).filter((tr, i) => cs[i].valid && tr.start > 0);
+      const near = live.reduce((t, tr) => t + Math.max(0, Math.min(1, 1 - tr.last / tr.start)), 0) / Math.max(1, live.length);
+      const f = this.passes + 0.25 * (this.touched[0] + this.touched[1]) + 0.25 * near;
       return cs.map(() => f);
     }
     if (task.kind === 'compete') {

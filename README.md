@@ -13,6 +13,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Following (water / land) | either | closing speed toward a light source, averaged over 3 trials with the light in different directions; per-block photosensors |
 | Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball (nearest part), less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"), of its own population or, with **Teams**, of a rival species; sizes capped at equal volume |
 | Cooperation (beyond Sims) | land, two creatures side by side behind a heavy ball, a goal ahead | one shared score: 0.8 × the share of the way the ball got to the goal + 0.2 × the share of their distance to the ball the two closed; a goal ends the game and scores 1 + the share of time left (so 1–2) |
+| Volley (beyond Sims) | land, two creatures facing each other across a light ball | one shared score: the number of passes (the ball travels ≥ 0.5 m between one creature's touch and the other's), plus up to 0.75 before the first for touching it and closing on it |
 
 ### Falling over: Sims' rules
 
@@ -217,6 +218,19 @@ zone and relaxing rules are the competition's. Lifespan is 15 s. Pairing works
 as in competition: with one population, each creature plays with the
 population's previous best; with **Two teams**, two species each play with the
 other's previous best. Show *Team B best* shows team B's side.
+
+## Volley
+
+A second game for two: the creatures face each other across a light ball
+(0.25 m, 0.15 kg), 1.5 m from it on either side as in competition, and share
+one score for passing it back and forth for 20 s. A **pass** is a touch by
+one creature after the other's, with the ball at least 0.5 m from where it
+was when the other last touched it; both on the ball at once is a scrum, and
+the touch after it doesn't count. Each pass is a point. Before the first,
+they can earn up to 0.75: 0.25 for each creature that touches the ball and
+0.25 for how much of the distance to it the two closed. The ball rolls, so
+passes are mostly along the ground rather than true volleys. The HUD counts
+passes; Teams works as in cooperation.
 
 ## Two teams
 

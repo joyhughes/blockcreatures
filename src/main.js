@@ -6,7 +6,7 @@ import { makeRng } from './math.js';
 import { Recorder } from './record.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -296,7 +296,7 @@ function showGen(gen, user = true) {
   const r = { genome: h.genome, opponent: h.opponent, phase: h.phase, scene: h.scene, gen, show: mode, fitness: h.best,
     label: (mode === 'ever' ? `best so far: generation ${gen}` : `generation ${gen} best`) + (ti >= 0 ? ` (island ${ti + 1})` : '') };
   // two teams: the creature shown is team A's, facing team B's previous best
-  const vs = TASKS[task].kind === 'cooperate' ? 'with' : 'against';
+  const vs = TASKS[task].kind === 'compete' ? 'against' : 'with';
   if (h.rivalGenome) {
     r.label = r.label.replace(/best/, 'team A best') + `, ${vs} team B's best of generation ${gen - 1}`;
     if (gen === 0) r.label = r.label.replace(/team B's best of generation -1/, 'a random team B creature');
@@ -732,6 +732,7 @@ function hudText(finalFit) {
   if (sim.settling) s = sim.relaxing && sim.tStart === null ? `relaxing ${sim.t.toFixed(1)}s (no friction, no muscles)` : `settling ${sim.t.toFixed(1)}s`;
   if (T.trials > 1) s += ` · trial ${replay.trial + 1}/${T.trials}`;
   if (sim.coop) s += sim.scored !== null ? ` · GOAL at ${sim.scored.toFixed(1)}s` : sim.tStart !== null ? ` · ball ${sim.ballToGoal().toFixed(2)} m from the goal` : '';
+  if (sim.volley && sim.tStart !== null) s += ` · ${sim.passes} pass${sim.passes === 1 ? '' : 'es'}`;
   if (sim.coop && sim.scene.together > 0 && sim.playSteps) s += ` · both on it ${Math.round(100 * sim.bothSteps / sim.playSteps)}%`;
   if (finalFit !== undefined) s += ` · this trial ${finalFit.toFixed(3)} ${UNITS[T.kind]}`;
   else if (replay.fitness !== undefined) s += ` · fitness ${replay.fitness.toFixed(3)} ${UNITS[T.kind]}`;
