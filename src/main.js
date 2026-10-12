@@ -53,7 +53,7 @@ function setTask(key) {
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
   grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether',
-  stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing' };
+  stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing', bothSides: 'scBothSides' };
 function readScene() {
   const s = {};
   for (const [k, id] of Object.entries(SC_FIELDS)) {
@@ -166,7 +166,8 @@ async function evolveLoop() {
     const before = evolver.pop.filter(p => p.fit === null).length;
     const varying = TASKS[task].kind === 'follow' || !!TASKS[task].pair;
     const h = await evolver.step();
-    evalCount += (varying ? evolver.popSize * TASKS[task].trials : before) * evolver.teams;
+    const sides = TASKS[task].pair && sceneFor(task, evolver.scene).bothSides ? 2 : 1;
+    evalCount += (varying ? evolver.popSize * TASKS[task].trials : before) * evolver.teams * sides;
     const secs = (performance.now() - evalT0) / 1000;
     $('sRate').textContent = (evalCount / secs).toFixed(0);
     // watching latest: switch once the current replay has played out

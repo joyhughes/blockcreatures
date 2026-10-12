@@ -268,6 +268,19 @@ the cube's height off the ground averaged over the last second of 15, so it
 has to be held up, not kicked: plus up to 0.2 for closing on it. There is no
 grip; a creature has to scoop, pinch or balance the cube with friction.
 
+## Both sides
+
+Rapier solves contacts in a fixed order, so the two creatures in a game
+aren't quite equal: in wrestling, a creature playing a copy of itself won
+2–0 every time from the first side. Evolution always plays the creature
+being scored first, so it learned to exploit that, and the median creature
+"beat" the previous best outright. With **Both sides** (default, scene
+panel) every two-creature game is played twice with the order swapped and
+the scores averaged, which makes a mirror match exactly 1–1. It doubles the
+evaluation time. Replays show the first side, so a replay's final score can
+differ from the averaged fitness. Runs from before the setting score one
+side.
+
 ## Two teams
 
 In competition and cooperation, **Teams** (Evolution panel) chooses who a

@@ -92,22 +92,25 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift'];
 //   goalSize   cooperation: the goal's radius; the ball is in when its centre is inside
 //   stepHeight, stepDepth, steps   stairs: each step's rise and tread (m), and how many
 //   ring       wrestling: the ring's radius (m) around the middle
+//   bothSides  two-creature games: each bout is played twice, swapping which creature is
+//              simulated first, and the scores averaged. Rapier solves in a fixed order, so
+//              side A can win a mirror match outright, and evolution exploited being side A
 //   together   cooperation: the share of the score (0..1) given for the share of the measured time
 //              both creatures touch the ball at once
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
-  stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2,
+  stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, bothSides: true,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false };
+export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false };
 // a task's default scene: SCENE with the task's own ball
 export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false };
   const legacy = NEW_KINDS.includes(TASKS[taskName].kind) ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -1087,6 +1090,13 @@ export class Sim {
 // Run a full evaluation (all trials) and return fitness per genome.
 export function evaluate(taskName, genomes, opts = {}) {
   const task = TASKS[taskName];
+  // both sides: the same bout with the creatures in swapped order, each
+  // creature's two scores averaged
+  if (task.pair && genomes.length === 2 && sceneFor(taskName, opts.scene).bothSides) {
+    const a = evaluate(taskName, genomes, { ...opts, scene: { ...opts.scene, bothSides: false } });
+    const b = evaluate(taskName, [genomes[1], genomes[0]], { ...opts, scene: { ...opts.scene, bothSides: false } });
+    return [(a[0] + b[1]) / 2, (a[1] + b[0]) / 2];
+  }
   const sum = genomes.map(() => 0);
   for (let trial = 0; trial < task.trials; trial++) {
     const sim = new Sim(taskName, genomes, { ...opts, trial });
