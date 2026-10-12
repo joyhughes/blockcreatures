@@ -17,6 +17,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Wrestling (beyond Sims) | land, two same-size creatures face to face, no ball | sumo: 1 + (how far the opponent's centre of mass ever got outside a 2 m ring − how far mine did) / 1 m + 0.5 × (its mean distance from the middle − mine) / 2 m, capped to 0–2, + 0.5 × the share of the bout the two are in contact; all vs. best like competition |
 | Stairs (beyond Sims) | land, a pit at the bottom of a square stepped amphitheatre (12 steps of 0.15 × 0.4 m) | metres climbed: ½ the centre of mass's rise + ½ the lowest part's final height |
 | Biped walking (beyond Sims) | land, the biped template | as walking, up to the first time any part but a foot or the tail touches the ground, + 0.1 × the share of the time it stayed up |
+| Quadruped walking (beyond Sims) | land, the quadruped template | as biped walking, falls being anything but the paws, toes or tail touching the ground |
 | Lifting (beyond Sims) | land, a barbell (a 1.2 m bar between two square 0.4 m plates, 0.3 kg; the bar 0.2 m off the ground) beside the creature | the barbell's height off the ground averaged over the last second, + up to 0.2 for closing on it |
 
 ### Falling over: Sims' rules
@@ -130,13 +131,17 @@ The quadruped's toes are fused to the paw. Jointed, they were light enough
 for the solver to gain energy, and one in eight random quadrupeds failed the
 energy audit. Toes fan outward so neighbours never cross.
 
-**Biped walking** (target): uses the biped template whatever plan is picked.
-Only the feet and the tail may touch the ground. Any other part touching it
-is a fall, and the walk ends there. Settling is timed with the brain on, so
+**Biped walking** and **Quadruped walking** (targets): each uses its
+template whatever plan is picked. Only the parts the template marks as
+ground parts may touch the ground: the biped's feet and tail, the
+quadruped's paws, toes and tail.
+Any other part touching it is a fall, and the walk ends there. Settling is timed with the brain on, so
 the creature can stand up. Scoring is the walking score up to the fall
 (half max distance / T, half the last third's distance / (T/3)), plus
 0.1 × the share of the time it stayed up, settling included. Random bipeds
 all fall within half a second, so standing longer is the first thing to evolve.
+Quadruped walking came after the plain Walking target's quadruped champion
+crawled on its side, its body upright only 4% of the time.
 
 **Evolution stays within a body plan.** Every target and body plan (arm
 count and round-parts setting included) has its own run in the app. Switching

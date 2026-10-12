@@ -6,7 +6,7 @@ import { makeRng } from './math.js';
 import { Recorder } from './record.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', biped: 'm/s' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -105,7 +105,7 @@ const PLAN_NOTES = {
   bilateral: 'Mirror-symmetric about the midplane. Attachments near the plane stay on it; others come in left/right pairs. Each side senses which side it is on (+1 / −1), so the two can move in antiphase.',
   radial: 'N-fold symmetric about the vertical axis. Parts on the axis become cylinders; other attachments are repeated around it. Each arm senses its position (2k/N), so the arms can beat in a travelling wave.',
   snake: 'Animal template: a head and a body chain (3–8 segments) tapering into a tail. Templates fix which parts there are and how they attach; evolution tunes their sizes, joints, chain lengths, attachment points and brains.',
-  quadruped: 'Animal template: a body on four legs, each with a hip and a knee and ending in a paw with five toes; a head, with an optional neck and trunk; an optional tail. Evolution tunes sizes, joints, attachment points and brains, and switches the optional parts on and off.',
+  quadruped: 'Animal template: a body on four legs, each with a hip and a knee and ending in a paw with five toes; a head, with an optional neck and trunk; an optional tail. Evolution tunes sizes, joints, attachment points and brains, and switches the optional parts on and off. The Quadruped walking target always uses it.',
   insect: 'Animal template: a thorax with six legs (hip and knee), a head with optional antennae and mandibles, and an abdomen with an optional stinger.',
   arachnid: 'Animal template: a body with eight legs (hip and knee) (optional pincers on the front pair), a head with optional mandibles, and an optional tail with a stinger.',
   crustacean: 'Animal template: a carapace with ten legs (hip and knee), the front pair ending in pincers; a head with antennae; an optional segmented tail.',
@@ -746,7 +746,7 @@ function hudText(finalFit) {
   if (sim.coop) s += sim.scored !== null ? ` · GOAL at ${sim.scored.toFixed(1)}s` : sim.tStart !== null ? ` · ball ${sim.ballToGoal().toFixed(2)} m from the goal` : '';
   if (sim.lift && sim.cube && sim.tStart !== null) s += ` · weight ${Math.max(0, sim.cube.translation().y - sim.ballR).toFixed(2)} m up`;
   if (sim.statics && sim.tStart !== null && sim.creatures[0].valid) s += ` · lowest part ${Math.max(0, sim.creatures[0].lowest()).toFixed(2)} m up`;
-  if (T.kind === 'biped' && sim.track[0]) { const f = sim.track[0].fell; s += f === undefined ? ' · upright' : f < T.settle ? ' · fell while settling' : ` · fell at ${(f - T.settle).toFixed(1)}s`; }
+  if (T.kind === 'upright' && sim.track[0]) { const f = sim.track[0].fell; s += f === undefined ? ' · upright' : f < T.settle ? ' · fell while settling' : ` · fell at ${(f - T.settle).toFixed(1)}s`; }
   if (sim.volley && sim.tStart !== null) s += ` · ${sim.passes} pass${sim.passes === 1 ? '' : 'es'}`;
   if (sim.coop && sim.scene.together > 0 && sim.playSteps) s += ` · both on it ${Math.round(100 * sim.bothSteps / sim.playSteps)}%`;
   if (finalFit !== undefined) s += ` · this trial ${finalFit.toFixed(3)} ${UNITS[T.kind]}`;

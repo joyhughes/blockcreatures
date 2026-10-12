@@ -770,7 +770,7 @@ export function graft(a, b, rng) {
 // LIMITS.effMin), conns: [{ to, face, u, v, rot: [twist, about Y, about Z],
 // scale, terminal, unless }], each value a number or a [lo, hi] range;
 // `unless`: the connection is off while that optional part is on.
-// ground: biped contest, the parts allowed to touch the ground.
+// ground: biped and quadruped walking, the parts allowed to touch the ground.
 
 const ANY = JOINTS, MOVE = JOINTS.slice(1);
 const BEND = ['revolute', 'universal'];
@@ -816,7 +816,7 @@ export const TEMPLATES = {
       conns: [{ to: 'trunk', face: 0, u: [-0.8, 0], v: 0, rot: [[-0.2, 0.2], [-0.3, 0.3], [-0.6, 0.2]], scale: [0.8, 1.2] }] },
     trunk: { optional: true, dims: [[0.1, 0.25], [0.05, 0.12], [0.05, 0.12]], joints: SEG, recur: [2, 5],
       conns: [chain('trunk', [0.75, 0.95], [[-0.2, 0.2], [-0.3, 0.3], [-0.4, 0.1]])] },
-    tail: { optional: true, dims: [[0.1, 0.3], [0.04, 0.12], [0.04, 0.12]], joints: SEG, recur: [2, 6], conns: [chain('tail')] },
+    tail: { optional: true, dims: [[0.1, 0.3], [0.04, 0.12], [0.04, 0.12]], joints: SEG, recur: [2, 6], ground: true, conns: [chain('tail')] },
     foreUpper: { dims: [[0.2, 0.5], [0.08, 0.2], [0.08, 0.2]], joints: LIMB, conns: [{ to: 'foreLower', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.4, 0.4], [-0.1, 0.2]], scale: [0.8, 1.2] }] },
     foreLower: { dims: [[0.2, 0.5], [0.06, 0.16], [0.06, 0.16]], joints: BEND, conns: [{ to: 'paw', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [-0.2, 0.2]], scale: 1 }] },
     hindUpper: { dims: [[0.2, 0.5], [0.08, 0.2], [0.08, 0.2]], joints: LIMB, conns: [{ to: 'hindLower', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.4, 0.4], [-0.1, 0.2]], scale: [0.8, 1.2] }] },
@@ -824,8 +824,8 @@ export const TEMPLATES = {
     // fused to the leg (the limb's joints are hip and knee), as are the toes
     // spread across its front: jointed, they were light enough to make the
     // solver gain energy
-    paw: { dims: [[0.05, 0.1], [0.18, 0.22], [0.12, 0.22]], joints: FIXED, conns: toes('toe') },
-    toe: { dims: [[0.06, 0.18], [0.025, 0.028], [0.025, 0.028]], joints: FIXED, minDim: 0.02, conns: [] },
+    paw: { dims: [[0.05, 0.1], [0.18, 0.22], [0.12, 0.22]], joints: FIXED, ground: true, conns: toes('toe') },
+    toe: { dims: [[0.06, 0.18], [0.025, 0.028], [0.025, 0.028]], joints: FIXED, minDim: 0.02, ground: true, conns: [] },
   } },
   // a thorax with six one-joint legs, a head (antennae, mandibles) and an
   // abdomen (stinger)
