@@ -255,7 +255,10 @@ straight through takes both out the far side, a draw, so staying in and
 shoving the other out is what wins. Two earlier rules, the pair's midpoint
 moving toward the opponent and then distance pushed back from the start,
 both evolved wrestlers that walked straight past each other. Evolved all vs. best like competition,
-with Teams.
+with Teams. The bundled champion (generation 49 of 100, seeded from the competition
+champion, picked by round-robin) shoves its opponent 0.3–0.5 m out of the
+ring from either side; with the champion taken away, the same opponent
+stays in.
 
 **Stairs**: the creature starts in a pit at the bottom of a square stepped
 amphitheatre, so it can climb in any direction. The pit clears the
