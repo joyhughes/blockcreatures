@@ -473,6 +473,12 @@ radial jumper's 0.71 J/kg (most of it on landing; at most 4 cm of its height).
 | Walking | bilateral, round | 150 + 60 | 2.71 m/s: the earlier champion (2.69 m/s, 1.33 under the new rules) re-adapted for 60 generations; a fresh 150-generation run reached only 1.04 |
 | Jumping | radial ×4, round | 150 | 0.78 m |
 | Following (water) | bilateral, round | 100 | 0.12–0.20 m/s from all 8 directions |
+| Walking | snake | 150 | 0.10 m/s: slithers 0.56 m in 10 s |
+| Walking | insect | 150 | 0.44 m/s: 4.2 m on its legs, mandibles helping; stinger off |
+| Walking | arachnid | 150 | 0.89 m/s: 8.8 m, body partly dragging; mandibles, pincers and tail off |
+| Walking | crustacean | 150 | 0.78 m/s: 7.4 m on its legs, pincers and antennae touching down |
+| Walking | centipede | 150 | 0.21 m/s: 1.1 m on its legs |
+| Biped walking | biped | 200 | 0.28: a striding gait on its feet alone, upright the whole bout (0.9 m in 10 s); arms off |
 
 Choosing a body plan shows the champion of exactly that target and plan,
 or an unevolved random creature with the plan if there is none yet. All
