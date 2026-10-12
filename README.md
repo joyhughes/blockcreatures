@@ -14,7 +14,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball (nearest part), less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"), of its own population or, with **Teams**, of a rival species; sizes capped at equal volume |
 | Cooperation (beyond Sims) | land, two creatures side by side behind a heavy ball, a goal ahead | one shared score: 0.8 × the share of the way the ball got to the goal + 0.2 × the share of their distance to the ball the two closed; a goal ends the game and scores 1 + the share of time left (so 1–2) |
 | Volley (beyond Sims) | land, two creatures facing each other across a light ball | one shared score: the number of passes (the ball travels ≥ 0.5 m between one creature's touch and the other's), plus up to 0.75 before the first for touching it and closing on it |
-| Wrestling (beyond Sims) | land, two same-size creatures face to face, no ball | sumo: 1 + (how far the opponent's centre of mass ever got outside a 2 m ring − how far mine did) / 1 m + 0.5 × (its mean distance from the middle − mine) / 2 m, capped to 0–2; all vs. best like competition |
+| Wrestling (beyond Sims) | land, two same-size creatures face to face, no ball | sumo: 1 + (how far the opponent's centre of mass ever got outside a 2 m ring − how far mine did) / 1 m + 0.5 × (its mean distance from the middle − mine) / 2 m, capped to 0–2, + 0.5 × the share of the bout the two are in contact; all vs. best like competition |
 | Stairs (beyond Sims) | land, a pit at the bottom of a square stepped amphitheatre (12 steps of 0.15 × 0.4 m) | metres climbed: ½ the centre of mass's rise + ½ the lowest part's final height |
 | Lifting (beyond Sims) | land, a barbell (a 1.2 m bar between two square 0.4 m plates, 0.3 kg; the bar 0.2 m off the ground) beside the creature | the barbell's height off the ground averaged over the last second, + up to 0.2 for closing on it |
 
@@ -237,8 +237,8 @@ passes; Teams works as in cooperation.
 
 ## Wrestling, stairs and lifting
 
-**Wrestling**: two creatures face each other across a 1 m gap (start zones
-0.5 m either side of the middle, Sims' slope), both scaled to the same
+**Wrestling**: two creatures face each other across a 0.1 m gap (start zones
+0.05 m either side of the middle, Sims' slope), both scaled to the same
 volume, with no ball. Each photosensor sees the opponent. It's sumo: a ring
 (**Ring radius**, 2 m) is drawn around the middle, and the score compares
 how far each one's centre of mass ever got outside it during the 20 s
@@ -247,7 +247,10 @@ further back than the ring):
 1 + (how far you got out − how far I did) / 1 m, plus 0.5 × the difference
 in average distance from the middle in ring radii, capped to 0–2. Without
 the centre term, standing apart at the edges was a sure draw and evolved
-wrestlers barely moved. Walking
+wrestlers barely moved. On top, both get 0.5 × the share of the bout they
+spend touching each other (**Contact bonus**). With the centre term alone
+and a 1 m gap, evolved wrestlers still never met: they won by drifting to
+the middle while the other wandered out on its own. Walking
 straight through takes both out the far side, a draw, so staying in and
 shoving the other out is what wins. Two earlier rules, the pair's midpoint
 moving toward the opponent and then distance pushed back from the start,
@@ -274,7 +277,9 @@ pushed. The score is the barbell's height off the ground averaged over the
 last second of 15, so it has to be held up, not kicked, plus up to 0.2 for
 closing on it. There is no grip: a creature has to hook or scoop the bar.
 A light cube (Prize: cube) is the original object; with it, evolution found
-only propping it against the body (6 cm).
+only propping it against the body (6 cm). The bundled champion (150
+generations) topples onto the barbell, scoops it up on one limb and carries
+it level about 0.5–0.9 m up for the rest of the bout.
 
 ## Both sides
 

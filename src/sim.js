@@ -54,7 +54,7 @@ export const TASKS = {
     scene: { ballSize: 0.25, ballMass: 0.15, gap: 1.5, duration: 20 } },
   // face to face, no ball: whoever pushes the other back further
   wrestle: { label: 'Wrestling', env: 'land', duration: 20, settle: 0.5, trials: 1, kind: 'wrestle', pair: true,
-    scene: { gap: 0.5, duration: 20 } },
+    scene: { gap: 0.1, duration: 20 } },
   // from a pit at the bottom of a square stepped amphitheatre, climb
   stairs: { label: 'Stairs', env: 'land', duration: 20, settle: 1, trials: 1, kind: 'climb',
     scene: { duration: 20 } },
@@ -94,6 +94,7 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift'];
 //   goalSize   cooperation: the goal's radius; the ball is in when its centre is inside
 //   stepHeight, stepDepth, steps   stairs: each step's rise and tread (m), and how many
 //   ring       wrestling: the ring's radius (m) around the middle
+//   engage     wrestling: points both wrestlers get for the share of the bout they're in contact
 //   bothSides  two-creature games: each bout is played twice, swapping which creature is
 //              simulated first, and the scores averaged. Rapier solves in a fixed order, so
 //              side A can win a mirror match outright, and evolution exploited being side A
@@ -103,16 +104,16 @@ export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
-  stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, bothSides: true,
+  stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false };
+export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0 };
 // a task's default scene: SCENE with the task's own ball
 export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0 };
   const legacy = NEW_KINDS.includes(TASKS[taskName].kind) ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -682,7 +683,7 @@ export class Sim {
       if ((this.volley = task.kind === 'volley')) Object.assign(this, { passes: 0, lastTouch: -1, lastPos: null, touched: [false, false] });
       this.wrestle = task.kind === 'wrestle';
       if (!this.wrestle) this.addBall([0, 0, 0]);
-      else this.ring = sc.ring;
+      else { this.ring = sc.ring; this.boutSteps = this.contactSteps = 0; }
       this.creatures = genomes.map((g, i) => new Creature(world, g, { ...copts,
         ground: true, maxVolume: sc.maxVolume, sameSize: sc.sameSize,
         side: i && !coop ? 1 : -1, yaw: i && !coop ? Math.PI : 0,
@@ -871,6 +872,11 @@ export class Sim {
     if (this.tStart === null) this.relaxStep();
     if (this.lift && this.tStart !== null && this.t >= this.tStart) this.liftStep();
     if (this.volley && this.tStart !== null && this.t >= this.tStart) this.volleyStep();
+    // wrestling: how long the two are in contact
+    if (this.wrestle && this.tStart !== null && this.t >= this.tStart) {
+      this.boutSteps++;
+      if (this.wrestling()) this.contactSteps++;
+    }
     // cooperation: how long both touch the ball at once, until the game ends
     if (this.coop && this.tStart !== null && this.t >= this.tStart && this.scored === null) {
       this.playSteps++;
@@ -918,6 +924,21 @@ export class Sim {
     const touch = this.ballSphere ? len(rel) <= r + 0.02
       : qrot(qconj(this.cube.rotation()), rel).every(x => Math.abs(x) <= r + 0.02);
     return touch ? rel : null;
+  }
+
+  // wrestling: whether any part of one creature touches the other
+  wrestling() {
+    const [a, b] = this.creatures;
+    if (!a?.valid || !b?.valid) return false;
+    for (const col of a.colliders) {
+      let hit = false;
+      this.world.contactPairsWith(col, other => {
+        if (hit || !b.colliderPart.has(other.handle)) return;
+        this.world.contactPair(col, other, m => { if (m.numContacts() > 0) hit = true; });
+      });
+      if (hit) return true;
+    }
+    return false;
   }
 
   touching(c) {
@@ -1066,7 +1087,11 @@ export class Sim {
       const [oa, ob] = this.track.map(tr => tr.maxOut || 0);
       const [ma, mb] = this.track.map(tr => (tr.rN ? tr.rSum / tr.rN : 0));
       const fa = 1 + Math.max(-1, Math.min(1, (ob - oa) / WRESTLE_SCALE + WRESTLE_CENTRE * (mb - ma) / this.ring));
-      return [fa, 2 - fa];
+      // Both get scene `engage` x the share of the bout spent in contact:
+      // without it, wrestlers that never met drew or won on the other
+      // wandering off, so evolution kept them apart
+      const e = (this.scene.engage || 0) * this.contactSteps / Math.max(1, this.boutSteps);
+      return [fa + e, 2 - fa + e];
     }
     if (this.volley) {
       // shared: one point a pass; before the first, up to 0.75 for getting
