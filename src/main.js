@@ -185,7 +185,8 @@ function switchRun() {
 let evalCount = 0, evalT0 = 0;
 let loopDone = Promise.resolve();   // settles when the evolution loop has stopped
 async function evolveLoop() {
-  if (!evolver.pop.length) evolver.seed();
+  // a loaded run saved without its population continues from its latest best
+  if (!evolver.pop.length) evolver.history.length && evolver.champ ? evolver.seedFrom(evolver.champ) : evolver.seed();
   evalT0 = performance.now(); evalCount = 0;
   while (running) {
     const before = evolver.pop.filter(p => p.fit === null).length;
@@ -663,14 +664,23 @@ $('save').onclick = () => {
 $('load').onchange = async e => {
   const f = e.target.files[0];
   if (!f) return;
-  const d = JSON.parse(await f.text());
+  loadRun(JSON.parse(await f.text()), f.name);
+  e.target.value = '';
+};
+
+// Open a saved run: the app's own saves, or a run file written by
+// tools/evolve.mjs (no scores in its population, team B as rivalHistory and
+// rivalPop, older ones without a population at all).
+function loadRun(d, name) {
+  if (!d.rival && d.rivalHistory) d.rival = { history: d.rivalHistory, pop: d.rivalPop, champ: d.rivalHistory.at(-1)?.genome };
+  const last = d.history?.at(-1);
   if (running) $('go').click();
   if (d.task && d.task !== task) {
     task = d.task;
     for (const b of $('tasks').children) b.classList.toggle('on', b.dataset.task === task);
     $('sUnit').textContent = 'best ' + UNITS[TASKS[task].kind];
   }
-  $('pop').value = d.popSize || 300;
+  $('pop').value = d.popSize || d.pop?.length || 300;
   const b = d.body || { plan: { type: 'free' }, round: false };
   planType = b.plan.type;
   if (b.plan.n) $('radialN').value = String(b.plan.n);
@@ -687,19 +697,54 @@ $('load').onchange = async e => {
   evolver.rng = makeRng((d.seed || 1) * 7919 + (d.gen || 0));
   evolver.history = d.history || [];
   evolver.gen = d.gen ?? evolver.history.length;
-  evolver.opponent = d.opponent || null;
-  evolver.pop = (d.pop || []).map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder, id: evolver.nextId++ }));
-  evolver.champ = d.champ || null;
+  evolver.opponent = d.opponent || last?.opponent || null;
+  // unscored members (command-line runs) are scored when evolution continues
+  evolver.pop = (d.pop || []).map(p => ({ g: p.g, fit: p.fit ?? null, isl: p.isl, founder: p.founder, id: evolver.nextId++ }));
+  evolver.champ = d.champ || last?.genome || null;
   const rv = evolver.rival;
   if (rv && d.rival) {
     rv.rng = makeRng((d.seed || 1) * 7919 + (d.gen || 0) + 101);
     Object.assign(rv, { history: d.rival.history || [], gen: d.rival.gen ?? evolver.gen, champ: d.rival.champ || null, opponent: d.rival.opponent || null });
-    rv.pop = (d.rival.pop || []).map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder, id: rv.nextId++ }));
+    rv.pop = (d.rival.pop || []).map(p => ({ g: p.g, fit: p.fit ?? null, isl: p.isl, founder: p.founder, id: rv.nextId++ }));
   }
   $('gens').innerHTML = '';
   refresh();
   if (evolver.history.length) showGen(evolver.history.length - 1);
+  const pl = planName(evolver.body.plan) + (evolver.rival && evolver.rival.body !== evolver.body ? ' v ' + planName(evolver.rival.body.plan) : '');
+  $('runNote').textContent = `Opened ${name}: ${TASKS[task].label}, ${pl}, ${evolver.history.length} generations`
+    + (evolver.pop.length ? '.' : ' (saved without its population: Evolve continues from its latest best).');
+}
+
+// The runs/ folder, newest first: serve.py lists it live; on a static host
+// it's the committed runs/index.json (tools/runsindex.mjs)
+const ago = s => (s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 129600 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago');
+async function listRuns() {
+  try {
+    const list = await (await fetch('runs/index.json')).json();
+    const now = Date.now() / 1000, sel = $('runs');
+    sel.length = 1;
+    for (const r of list) {
+      const o = document.createElement('option');
+      o.value = r.file;
+      o.textContent = `${r.file.replace(/\.json$/, '').replace(/-isl\d+-nov[\d.]+-st[\d.]+/, '')} · ${ago(now - r.mtime)}`;
+      sel.append(o);
+    }
+    sel.disabled = false;
+  } catch { $('runs').disabled = true; $('runs').title = 'No runs/index.json here (serve.py lists runs/; tools/runsindex.mjs writes it for a static host)'; }
+}
+listRuns();
+$('runs').onfocus = $('runs').onmousedown = () => { if (!$('runs').value) listRuns(); };
+$('runs').onchange = async e => {
+  const f = e.target.value;
+  if (!f) return;
   e.target.value = '';
+  $('runNote').textContent = `Opening ${f}…`;
+  // a run still evolving may be caught mid-write: try again a moment later
+  for (let k = 0; k < 3; k++) {
+    try { return loadRun(await (await fetch('runs/' + encodeURIComponent(f))).json(), f); }
+    catch { await new Promise(r => setTimeout(r, 1000)); }
+  }
+  $('runNote').textContent = `Couldn't read ${f}.`;
 };
 
 // ---------------------------------------------------------------- frame loop

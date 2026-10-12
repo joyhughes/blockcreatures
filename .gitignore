@@ -1,5 +1,5 @@
 node_modules/
 .DS_Store
-# headless run histories are large and regenerable; the regression baseline is kept
-runs/*
-!runs/baseline.json
+# run files are published for the app's Runs menu (with runs/index.json from
+# tools/runsindex.mjs); their logs aren't
+runs/*.log

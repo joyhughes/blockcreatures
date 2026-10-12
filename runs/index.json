@@ -1,0 +1,352 @@
+[
+ {
+  "file": "walk-65-centipede-isl6-nov0.3-st0.25.json",
+  "mtime": 1791834652.6356657,
+  "size": 6115446
+ },
+ {
+  "file": "walk-65-crustacean-isl6-nov0.3-st0.25.json",
+  "mtime": 1791834631.0994556,
+  "size": 11140108
+ },
+ {
+  "file": "quadruped-66-quadruped-isl6-nov0.3-st0.25.json",
+  "mtime": 1791834534.6836064,
+  "size": 17369238
+ },
+ {
+  "file": "walk-65-insect-isl6-nov0.3-st0.25.json",
+  "mtime": 1791833023.4333036,
+  "size": 10739833
+ },
+ {
+  "file": "walk-65-arachnid-isl6-nov0.3-st0.25.json",
+  "mtime": 1791832747.1140592,
+  "size": 11568356
+ },
+ {
+  "file": "walk-64-quadruped-isl6-nov0.3-st0.25.json",
+  "mtime": 1791823701.3092394,
+  "size": 12200330
+ },
+ {
+  "file": "walk-63-quadruped-isl6-nov0.3-st0.25.json",
+  "mtime": 1791823694.3382251,
+  "size": 11975470
+ },
+ {
+  "file": "walk-62-crustacean-isl6-nov0.3-st0.25.json",
+  "mtime": 1791819799.0369859,
+  "size": 7139360
+ },
+ {
+  "file": "walk-62-quadruped-isl6-nov0.3-st0.25.json",
+  "mtime": 1791819782.3154225,
+  "size": 10514079
+ },
+ {
+  "file": "walk-62-centipede-isl6-nov0.3-st0.25.json",
+  "mtime": 1791819629.744559,
+  "size": 3847364
+ },
+ {
+  "file": "biped-61-biped-isl6-nov0.3-st0.25.json",
+  "mtime": 1791817574.1017385,
+  "size": 9866266
+ },
+ {
+  "file": "walk-62-arachnid-isl6-nov0.3-st0.25.json",
+  "mtime": 1791816676.5081263,
+  "size": 7689930
+ },
+ {
+  "file": "walk-62-insect-isl6-nov0.3-st0.25.json",
+  "mtime": 1791814311.848267,
+  "size": 6805400
+ },
+ {
+  "file": "walk-62-snake-isl6-nov0.3-st0.25.json",
+  "mtime": 1791809988.0570514,
+  "size": 2940542
+ },
+ {
+  "file": "wrestle-59-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791804828.1559525,
+  "size": 6343555
+ },
+ {
+  "file": "wrestle-57-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791794924.5346472,
+  "size": 3332241
+ },
+ {
+  "file": "lift-58-isl6-nov0.3-st0.25.json",
+  "mtime": 1791792318.5993137,
+  "size": 7864426
+ },
+ {
+  "file": "wrestle-56-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791785753.8239913,
+  "size": 120615
+ },
+ {
+  "file": "wrestle-55-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791785266.3625803,
+  "size": 3338405
+ },
+ {
+  "file": "wrestle-54-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791782563.9978623,
+  "size": 1596191
+ },
+ {
+  "file": "wrestle-51-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791781568.133263,
+  "size": 2572258
+ },
+ {
+  "file": "stairs-52-isl6-nov0.3-st0.25.json",
+  "mtime": 1791780925.6352835,
+  "size": 4415472
+ },
+ {
+  "file": "lift-53-isl6-nov0.3-st0.25.json",
+  "mtime": 1791779645.4097521,
+  "size": 4610171
+ },
+ {
+  "file": "volley-42-isl6-nov0.3-st0.25-teams-seeded.json",
+  "mtime": 1791778319.3407125,
+  "size": 5836285
+ },
+ {
+  "file": "volley-41-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791778093.2689695,
+  "size": 2206540
+ },
+ {
+  "file": "compete-32-isl6-nov0.3-st0.25.json",
+  "mtime": 1791762456.6054716,
+  "size": 8341713
+ },
+ {
+  "file": "compete-31-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791762445.534028,
+  "size": 7348868
+ },
+ {
+  "file": "cooperate-22-isl6-nov0.3-st0.25-teams-seeded.json",
+  "mtime": 1791758724.8582468,
+  "size": 12653595
+ },
+ {
+  "file": "cooperate-21-isl6-nov0.3-st0.25-teams-seeded.json",
+  "mtime": 1791758499.259778,
+  "size": 14007434
+ },
+ {
+  "file": "compete-14-isl6-nov0.3-st0.25.json",
+  "mtime": 1791758205.6961799,
+  "size": 9418207
+ },
+ {
+  "file": "compete-15-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791758139.4967988,
+  "size": 6979756
+ },
+ {
+  "file": "compete-13-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791753628.437128,
+  "size": 2981734
+ },
+ {
+  "file": "compete-12-isl6-nov0.3-st0.25.json",
+  "mtime": 1791753616.3470035,
+  "size": 3094321
+ },
+ {
+  "file": "compete-oldchamp.json",
+  "mtime": 1791752325.729747,
+  "size": 7033
+ },
+ {
+  "file": "compete-11-isl6-nov0.3-st0.25.json",
+  "mtime": 1791752267.6707036,
+  "size": 2955817
+ },
+ {
+  "file": "cooperate-1-isl4-nov0.3-st0.25-teams-seeded.json",
+  "mtime": 1791747830.8519547,
+  "size": 2786543
+ },
+ {
+  "file": "cooperate-1-isl4-nov0.3-st0.25-teams.json",
+  "mtime": 1791747276.6440468,
+  "size": 1748143
+ },
+ {
+  "file": "walk-8-bilateral-round-isl6-nov0.3-st0.25-seeded.json",
+  "mtime": 1791737280.0783005,
+  "size": 2509104
+ },
+ {
+  "file": "jump-7-radial4-round-isl6-nov0.3-st0.25.json",
+  "mtime": 1791737220.6961029,
+  "size": 1843182
+ },
+ {
+  "file": "walk-7-radial5-round-isl6-nov0.3-st0.25.json",
+  "mtime": 1791737115.7862759,
+  "size": 2481486
+ },
+ {
+  "file": "walk-7-bilateral-round-isl6-nov0.3-st0.25.json",
+  "mtime": 1791736955.052161,
+  "size": 2124457
+ },
+ {
+  "file": "compete-7-isl6-nov0.3-st0.25.json",
+  "mtime": 1791736836.0285552,
+  "size": 5232984
+ },
+ {
+  "file": "followLand-7-isl6-nov0.3-st0.25.json",
+  "mtime": 1791736376.6041763,
+  "size": 4616928
+ },
+ {
+  "file": "jump-7-isl6-nov0.3-st0.25.json",
+  "mtime": 1791735657.6069953,
+  "size": 2167202
+ },
+ {
+  "file": "walk-7-isl6-nov0.3-st0.25.json",
+  "mtime": 1791735607.4765282,
+  "size": 5452019
+ },
+ {
+  "file": "compete-3-isl6-nov0.3-st0.25.json",
+  "mtime": 1791717863.5300736,
+  "size": 4182870
+ },
+ {
+  "file": "followLand-5.json",
+  "mtime": 1791706309.5084147,
+  "size": 2398373
+ },
+ {
+  "file": "walk-2.json",
+  "mtime": 1791696715.6281893,
+  "size": 289465
+ },
+ {
+  "file": "swim-1-radial6-round-seeded.json",
+  "mtime": 1791695097.9014518,
+  "size": 333903
+ },
+ {
+  "file": "followWater-1-bilateral-round.json",
+  "mtime": 1791684420.3423994,
+  "size": 184127
+ },
+ {
+  "file": "jump-1-radial4-round.json",
+  "mtime": 1791684178.872075,
+  "size": 503811
+ },
+ {
+  "file": "walk-1-bilateral-round.json",
+  "mtime": 1791683999.3397088,
+  "size": 836448
+ },
+ {
+  "file": "swim-1-bilateral-round.json",
+  "mtime": 1791683919.3089063,
+  "size": 293741
+ },
+ {
+  "file": "walk-1-radial5-round.json",
+  "mtime": 1791683815.7832088,
+  "size": 383633
+ },
+ {
+  "file": "swim-1-radial5-round.json",
+  "mtime": 1791683657.1301718,
+  "size": 455851
+ },
+ {
+  "file": "followWater-5.json",
+  "mtime": 1791682570.7892807,
+  "size": 2032447
+ },
+ {
+  "file": "compete-2.json",
+  "mtime": 1791681669.3776436,
+  "size": 727762
+ },
+ {
+  "file": "jump-2.json",
+  "mtime": 1791681189.5751112,
+  "size": 211146
+ },
+ {
+  "file": "swim-2.json",
+  "mtime": 1791681019.5936694,
+  "size": 414094
+ },
+ {
+  "file": "walk-7.json",
+  "mtime": 1791680919.2149775,
+  "size": 117329
+ },
+ {
+  "file": "followLand-2.json",
+  "mtime": 1791216465.3075821,
+  "size": 502627
+ },
+ {
+  "file": "followWater-2.json",
+  "mtime": 1791216307.1435122,
+  "size": 1088066
+ },
+ {
+  "file": "swim-1.json",
+  "mtime": 1791215356.665646,
+  "size": 522802
+ },
+ {
+  "file": "swim-3.json",
+  "mtime": 1791215290.830319,
+  "size": 166646
+ },
+ {
+  "file": "swim-4.json",
+  "mtime": 1791215169.3687987,
+  "size": 799759
+ },
+ {
+  "file": "compete-1.json",
+  "mtime": 1791213871.3706362,
+  "size": 186051
+ },
+ {
+  "file": "followLand-1.json",
+  "mtime": 1791213844.4934428,
+  "size": 85840
+ },
+ {
+  "file": "followWater-1.json",
+  "mtime": 1791213517.6038506,
+  "size": 53648
+ },
+ {
+  "file": "jump-1.json",
+  "mtime": 1791213456.2261999,
+  "size": 36926
+ },
+ {
+  "file": "walk-1.json",
+  "mtime": 1791213449.9321554,
+  "size": 56654
+ }
+]

@@ -221,7 +221,9 @@
   <div class="row">
     <button id="save">Save run</button>
     <label class="note" style="cursor:pointer"><input type="file" id="load" accept=".json" hidden><span style="text-decoration:underline">Load run…</span></label>
+    <select id="runs" title="Open a run from the runs/ folder: the command-line runs (tools/evolve.mjs) included, newest first. A run still evolving opens as of its latest generation; pick it again to catch up"><option value="">Runs…</option></select>
   </div>
+  <p class="note" id="runNote"></p>
 </aside>
 <script type="module" src="src/main.js"></script>
 </body>

@@ -443,6 +443,13 @@ the scene they evolved in (timed settling; a 0.8 m cube 1.5 m away).
 **Evolve from this** starts a new run seeded with mutants of whatever creature
 is on screen, with its body plan and target.
 
+**Runs…** (under Save) opens any run in `runs/`, newest first, including the
+command-line runs from `tools/evolve.mjs`: its generations, chart, island and
+team B bests, and Evolve to carry on from where it stopped. **Load run…**
+takes the same files from disk. Locally, `serve.py` lists the folder as it is
+now. On GitHub Pages, the list is the committed `runs/index.json`
+(`node tools/runsindex.mjs`), so run that before committing new runs.
+
 ## Running
 
 Live: https://joyhughes.github.io/blockcreatures/
@@ -476,6 +483,7 @@ Headless evolution (uses all cores via worker_threads):
 
 ```sh
 node tools/evolve.mjs <task> [generations] [popSize] [seed]   # -> runs/<task>-<seed>.json
+node tools/runsindex.mjs                                       # -> runs/index.json, the Runs menu on GitHub Pages
 node tools/champion.mjs runs/<task>-<seed>.json                # -> champions/<task>.json
 node tools/inspect.mjs runs/<task>-<seed>.json [gen]           # morphology, brain, trajectory
 node tools/energy.mjs  runs/<task>-<seed>.json [gen]           # energy audit (exploit check)
