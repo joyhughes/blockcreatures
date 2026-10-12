@@ -25,7 +25,7 @@ if (kind === 'follow') {
     }
     if (!broke && sum / n > score) { score = sum / n; pick = { ...h, phase: 0 }; }
   }
-} else if (kind === 'compete') {
+} else if (kind === 'compete' || kind === 'wrestle') {
   // "all vs. best" scores only say how a creature did against the previous
   // best, so they hover near 1 in an arms race. Play the bests of every 10th
   // generation (and the last) against each other, both sides, and keep the
@@ -63,4 +63,4 @@ if (tag) {
   if (i >= 0) idx[i] = entry; else idx.push(entry);
   writeFileSync('examples/index.json', JSON.stringify(idx, null, 1));
 }
-console.log(file, 'gen', pick.gen, 'fitness', fit.toFixed(3), kind === 'follow' ? `(mean over 8 light directions x ${TASKS[task].trials} trials ${score.toFixed(3)})` : kind === 'compete' ? `(round-robin average ${score.toFixed(3)})` : '');
+console.log(file, 'gen', pick.gen, 'fitness', fit.toFixed(3), kind === 'follow' ? `(mean over 8 light directions x ${TASKS[task].trials} trials ${score.toFixed(3)})` : kind === 'compete' || kind === 'wrestle' ? `(round-robin average ${score.toFixed(3)})` : '');

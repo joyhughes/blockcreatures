@@ -52,7 +52,18 @@ export const TASKS = {
   // times they pass it back and forth
   volley: { label: 'Volley', env: 'land', duration: 20, settle: 0.5, trials: 1, kind: 'volley', pair: true,
     scene: { ballSize: 0.25, ballMass: 0.15, gap: 1.5, duration: 20 } },
+  // face to face, no ball: whoever pushes the other back further
+  wrestle: { label: 'Wrestling', env: 'land', duration: 20, settle: 0.5, trials: 1, kind: 'wrestle', pair: true,
+    scene: { gap: 0.5, duration: 20 } },
+  // from a pit at the bottom of a square stepped amphitheatre, climb
+  stairs: { label: 'Stairs', env: 'land', duration: 20, settle: 1, trials: 1, kind: 'climb',
+    scene: { duration: 20 } },
+  // a light cube on the ground beside it: lift it as high as it can hold it
+  lift: { label: 'Lifting', env: 'land', duration: 15, settle: 1, trials: 1, kind: 'lift',
+    scene: { ball: 'cube', ballSize: 0.1, ballMass: 0.1, duration: 15 } },
 };
+// targets that came after scenes: a run without one has no legacy scene
+const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift'];
 
 // Scene parameters, adjustable per run (the UI's Scene section). A run's
 // scene travels with its jobs, history and champions; a saved creature
@@ -79,12 +90,14 @@ export const TASKS = {
 //              moves into its start zone; false = relaxes in place against the zone, sensing
 //   goalDist   cooperation: the goal's centre, this far from the ball's start (m), away from the creatures
 //   goalSize   cooperation: the goal's radius; the ball is in when its centre is inside
+//   stepHeight, stepDepth, steps   stairs: each step's rise and tread (m), and how many
 //   together   cooperation: the share of the score (0..1) given for the share of the measured time
 //              both creatures touch the ball at once
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
+  stepHeight: 0.15, stepDepth: 0.4, steps: 12,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
 export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false };
@@ -94,7 +107,7 @@ export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
   const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false };
-  const legacy = TASKS[taskName].kind === 'cooperate' || TASKS[taskName].kind === 'volley' ? {} : LEGACY_SCENE;
+  const legacy = NEW_KINDS.includes(TASKS[taskName].kind) ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
   return s;
@@ -103,6 +116,10 @@ const RELAX_STILL = 0.5;   // stable: the centre of mass hasn't dropped for this
 const RELAX_MIN = 0.3, RELAX_MAX = 5;   // ... but at least / at most this long
 const BALL_ROLL = 0.02;
 const APART = 50;   // settling apart: each creature this far to the side (m)
+const WRESTLE_SCALE = 2;   // wrestling: pushing the pair this far (m) toward the other's side is a full win
+const STAIR_MARGIN = 0.3;   // stairs: the pit reaches this far (m) past the creature's widest point
+const LIFT_GAP = 0.3;   // lifting: the cube starts this far (m) beyond the creature's furthest point in +x
+const LIFT_HOLD = 1;   // lifting: the cube's height is averaged over the last this many seconds
 const PASS_MIN = 0.5;   // volley: the ball travels at least this far (m) between the two creatures' touches
 const COOP_SPACING = 0.5;   // cooperation: gap between the two creatures at the start (m)    // rolling resistance of the ball: it rolls far, but stops
 
@@ -655,12 +672,8 @@ export class Sim {
       // volley: passes so far; who touched the ball last, and where it was
       // when they last touched it; whether each has touched it at all
       if ((this.volley = task.kind === 'volley')) Object.assign(this, { passes: 0, lastTouch: -1, lastPos: null, touched: [false, false] });
-      const r = this.ballR = sc.ballSize, sphere = this.ballSphere = sc.ball === 'sphere';
-      const vol = sphere ? 4 / 3 * Math.PI * r ** 3 : 8 * r ** 3;
-      const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, r, 0).setCanSleep(false));
-      this.ballCol = world.createCollider((sphere ? RAPIER.ColliderDesc.ball(r) : RAPIER.ColliderDesc.cuboid(r, r, r))
-        .setDensity(sc.ballMass / vol).setFriction(sc.friction), body);
-      this.cube = body;
+      this.wrestle = task.kind === 'wrestle';
+      if (!this.wrestle) this.addBall([0, 0, 0]);
       this.creatures = genomes.map((g, i) => new Creature(world, g, { ...copts,
         ground: true, maxVolume: sc.maxVolume, sameSize: sc.sameSize,
         side: i && !coop ? 1 : -1, yaw: i && !coop ? Math.PI : 0,
@@ -690,6 +703,10 @@ export class Sim {
       }
     } else {
       this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land }));
+      if (task.kind === 'climb') this.buildStairs();
+      // lifting: the cube appears when measuring starts (addBall), so the
+      // creature can't settle onto it; its height over the last LIFT_HOLD s
+      if ((this.lift = task.kind === 'lift')) Object.assign(this, { liftSum: 0, liftN: 0 });
     }
     this.t = 0;
     this.steps = 0;
@@ -707,6 +724,36 @@ export class Sim {
   }
 
   get settling() { return this.tStart === null || this.t < this.tStart; }
+
+  // the ball (or cube) resting on the ground at p; added mid-run (lifting),
+  // its energy joins the audit's starting energy
+  addBall(p) {
+    const sc = this.scene, r = this.ballR = sc.ballSize, sphere = this.ballSphere = sc.ball === 'sphere';
+    const vol = sphere ? 4 / 3 * Math.PI * r ** 3 : 8 * r ** 3;
+    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(p[0], r, p[2]).setCanSleep(false));
+    this.ballCol = this.world.createCollider((sphere ? RAPIER.ColliderDesc.ball(r) : RAPIER.ColliderDesc.cuboid(r, r, r))
+      .setDensity(sc.ballMass / vol).setFriction(sc.friction), body);
+    this.cube = body;
+    if (this.e0 !== undefined) { this.e0 += body.mass() * this.g * r; this.mass += body.mass(); }
+  }
+
+  // stairs: square rings stacked into an amphitheatre around a pit that
+  // clears the creature's widest point by STAIR_MARGIN. Step k is a ring of
+  // four boxes from its inner edge out to the edge of the whole flight.
+  buildStairs() {
+    const c = this.creatures[0], sc = this.scene;
+    if (!c.valid) return;
+    const r0 = Math.max(...[[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]].map(w => -c.minAlong(w))) + STAIR_MARGIN;
+    const h = sc.stepHeight, d = sc.stepDepth, R = r0 + sc.steps * d;
+    this.statics = []; this.staticCols = [];
+    for (let k = 0; k < sc.steps; k++) {
+      const a = r0 + k * d, w = (R - a) / 2, y = (k + 0.5) * h;
+      for (const [cx, cz, hx, hz] of [[a + w, 0, w, R], [-a - w, 0, w, R], [0, a + w, a, w], [0, -a - w, a, w]]) {
+        this.statics.push({ c: [cx, y, cz], h: [hx, h / 2, hz] });
+        this.staticCols.push(this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, h / 2, hz).setTranslation(cx, y, cz).setFriction(this.relaxing ? 0 : sc.friction)));
+      }
+    }
+  }
 
   // competition: move each contestant toward the ball until it touches the
   // starting plane (Sims): every point at height y is at least gap + y/tan(slope)
@@ -728,7 +775,7 @@ export class Sim {
     // on frictionless ground a horizontal shift doesn't change how a body
     // settles, so contestants glide along the plane as they topple rather
     // than jump to it at the end
-    if (this.cube && this.scene.zone === 'plane' && !this.apart) this.placeInZone();
+    if (this.task.pair && this.scene.zone === 'plane' && !this.apart) this.placeInZone();
     let still = this.t >= RELAX_MIN;
     this.creatures.forEach((c, i) => {
       if (!c.valid || this.failed[i]) return;
@@ -740,6 +787,7 @@ export class Sim {
     const f = this.scene.friction;
     this.groundCol.setFriction(f);
     this.creatures.forEach(c => { if (c.valid) c.setFriction(f); });
+    for (const col of this.staticCols || []) col.setFriction(f);
     if (this.apart) {
       this.creatures.forEach((c, i) => { if (c.valid) c.shift([0, 0, -this.apart[i]]); });
       if (this.scene.zone === 'plane') this.placeInZone();
@@ -762,6 +810,8 @@ export class Sim {
       const c = cs[i];
       if (!c.valid || this.failed[i]) continue;
       let target = this.light || cube, other = null;
+      // wrestling: both photosensors see the opponent
+      if (this.wrestle && cs[1 - i]?.valid) target = cs[1 - i].com();
       // cooperation: the second photosensor sees the goal instead of the partner
       if (this.coop) other = this.goal;
       else if (task.pair && cs[1 - i] && cs[1 - i].valid) other = cs[1 - i].com();
@@ -788,6 +838,7 @@ export class Sim {
       if (this.tStart !== null && this.t >= this.tStart) this.trackStep(i);
     }
     if (this.tStart === null) this.relaxStep();
+    if (this.lift && this.tStart !== null && this.t >= this.tStart) this.liftStep();
     if (this.volley && this.tStart !== null && this.t >= this.tStart) this.volleyStep();
     // cooperation: how long both touch the ball at once, until the game ends
     if (this.coop && this.tStart !== null && this.t >= this.tStart && this.scored === null) {
@@ -896,11 +947,28 @@ export class Sim {
       const d = len(sub(c.com(), this.light));
       if (tr.start === null) tr.start = d;
       tr.last = d;
-    } else if (task.kind === 'cooperate' || task.kind === 'volley') {
+    } else if (task.kind === 'wrestle') {
+      const p = c.com();
+      if (!tr.start) tr.start = [p[0], 0, p[2]];
+      tr.last = [p[0], 0, p[2]];
+    } else if (task.kind === 'climb') {
+      tr.last = y; tr.low = c.lowest();
+    } else if (task.kind === 'cooperate' || task.kind === 'volley' || (task.kind === 'lift' && this.cube)) {
       const d = c.distanceTo(this.cubePos());
       if (tr.start === null) tr.start = d;
       tr.last = d;
     }
+  }
+
+  // lifting: the cube is placed when measuring starts; then its height off
+  // the ground over the last LIFT_HOLD seconds is averaged
+  liftStep() {
+    const c = this.creatures[0];
+    if (!this.cube) {
+      if (c.valid) this.addBall([-c.minAlong([-1, 0, 0]) + LIFT_GAP + this.scene.ballSize, 0, 0]);
+      return;
+    }
+    if (this.t - this.tStart >= this.T - LIFT_HOLD) { this.liftSum += Math.max(0, this.cube.translation().y - this.ballR); this.liftN++; }
   }
 
   // volley: a pass is a touch by one creature after the other's, with the
@@ -943,6 +1011,17 @@ export class Sim {
         : (1 - w) * (0.8 * clamp((sc.goalDist - this.ballToGoal()) / Math.max(0.01, sc.goalDist - sc.goalSize)) + 0.2 * near) + w * both;
       return cs.map(() => f);
     }
+    if (this.wrestle) {
+      // how far the pair's midpoint moved toward the other's start, which is
+      // half of (how far I pushed you back - how far you pushed me back);
+      // WRESTLE_SCALE metres is a full win (2) or loss (0)
+      const cs = this.creatures;
+      if (cs.some((c, i) => !c.valid || this.failed[i]) || !this.track[0].start || !this.track[1].start) return cs.map(() => 0);
+      const [ta, tb] = this.track, u0 = sub(tb.start, ta.start), u = scale(u0, 1 / Math.max(1e-9, len(u0)));
+      const m = (dot(sub(ta.last, ta.start), u) + dot(sub(tb.last, tb.start), u)) / 2;
+      const fa = 1 + Math.max(-1, Math.min(1, m / WRESTLE_SCALE));
+      return [fa, 2 - fa];
+    }
     if (this.volley) {
       // shared: one point a pass; before the first, up to 0.75 for getting
       // there: 0.25 for each creature that touched the ball and 0.25 x the
@@ -977,6 +1056,15 @@ export class Sim {
         return Math.max(0, 0.5 * (tr.maxDist - drop) / T + 0.5 * Math.max(0, len(sub(tr.last, tr.mark)) - dropLate) / (T / 3));
       }
       if (task.kind === 'jump') return Math.max(0, tr.maxLow);
+      // stairs: half the COM's rise, half the lowest point's final height,
+      // so standing up tall earns little and every part has to climb
+      if (task.kind === 'climb') return tr.last === undefined ? 0 : Math.max(0, 0.5 * (tr.last - tr.y0) + 0.5 * Math.max(0, tr.low));
+      // lifting: the cube's average height off the ground over the last
+      // LIFT_HOLD s, plus up to 0.2 for closing on it
+      if (task.kind === 'lift') {
+        const near = tr.start > 0 ? Math.max(0, Math.min(1, 1 - tr.last / tr.start)) : 0;
+        return (this.liftN ? this.liftSum / this.liftN : 0) + 0.2 * near;
+      }
       if (task.kind === 'follow') return tr.start === null ? 0 : (tr.start - tr.last - (tr.y0 === undefined ? 0 : tr.y0 - tr.minY)) / T;
       return 0;
     });

@@ -14,6 +14,9 @@ evolved together, for the same evolutionary targets Sims used:
 | Competition | land, two creatures, a ball (or Sims' cube) between them | 1 + (d_opp − d_self)/(d_opp + d_self) from the final distances to the ball (nearest part), less a bonus for wrapping around it; each creature competes against the previous generation's best ("all vs. best"), of its own population or, with **Teams**, of a rival species; sizes capped at equal volume |
 | Cooperation (beyond Sims) | land, two creatures side by side behind a heavy ball, a goal ahead | one shared score: 0.8 × the share of the way the ball got to the goal + 0.2 × the share of their distance to the ball the two closed; a goal ends the game and scores 1 + the share of time left (so 1–2) |
 | Volley (beyond Sims) | land, two creatures facing each other across a light ball | one shared score: the number of passes (the ball travels ≥ 0.5 m between one creature's touch and the other's), plus up to 0.75 before the first for touching it and closing on it |
+| Wrestling (beyond Sims) | land, two same-size creatures face to face, no ball | 1 + (how far the pair's midpoint moved toward the opponent's start) / 2 m, capped to 0–2: half of how far I pushed you back minus how far you pushed me; all vs. best like competition |
+| Stairs (beyond Sims) | land, a pit at the bottom of a square stepped amphitheatre (12 steps of 0.15 × 0.4 m) | metres climbed: ½ the centre of mass's rise + ½ the lowest part's final height |
+| Lifting (beyond Sims) | land, a light cube (0.2 m, 0.1 kg) on the ground beside the creature | the cube's height off the ground averaged over the last second, + up to 0.2 for closing on it |
 
 ### Falling over: Sims' rules
 
@@ -231,6 +234,32 @@ they can earn up to 0.75: 0.25 for each creature that touches the ball and
 0.25 for how much of the distance to it the two closed. The ball rolls, so
 passes are mostly along the ground rather than true volleys. The HUD counts
 passes; Teams works as in cooperation.
+
+## Wrestling, stairs and lifting
+
+**Wrestling**: two creatures face each other across a 1 m gap (start zones
+0.5 m either side of the middle, Sims' slope), both scaled to the same
+volume, with no ball. Each photosensor sees the opponent. The score is how
+far the pair's midpoint moved toward the opponent's start over 20 s, which
+is half of (how far I pushed you back − how far you pushed me back); 2 m is
+a full win (2) or loss (0). Advancing into empty space counts too, so a
+wrestler that hangs back gets pushed. Evolved all vs. best like competition,
+with Teams.
+
+**Stairs**: the creature starts in a pit at the bottom of a square stepped
+amphitheatre, so it can climb in any direction. The pit clears the
+creature's widest point by 0.3 m; **Step height**, **Step depth** and
+**Steps** are in the scene panel (0.15 m, 0.4 m, 12). The score is half the
+centre of mass's rise plus half the lowest part's final height: standing up
+tall earns a little, and every part has to get up the steps to earn the
+rest. The HUD shows the lowest part's height.
+
+**Lifting**: when measuring starts, a light cube (0.1 m half-size, 0.1 kg;
+the scene's Prize, Size and Mass) appears on the ground 0.3 m beyond the
+creature's furthest point, where its photosensors can see it. The score is
+the cube's height off the ground averaged over the last second of 15, so it
+has to be held up, not kicked: plus up to 0.2 for closing on it. There is no
+grip; a creature has to scoop, pinch or balance the cube with friction.
 
 ## Two teams
 

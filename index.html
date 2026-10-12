@@ -119,7 +119,7 @@
     <label>Population <input type="number" id="pop" value="300" min="20" max="2000" step="10"></label>
     <label>Seed <input type="number" id="seed" value="1" min="1"></label>
     <label title="Sub-populations that select and mate separately; each island's best migrates to the next every 10 generations. 1 = Sims' single population">Islands <select id="islands"><option>1</option><option>2</option><option>4</option><option selected>6</option><option>8</option><option>12</option></select></label>
-    <label data-kind="compete cooperate volley" title="One population: every creature plays with or against the population's own best of the previous generation. Two teams: two species that never interbreed, each paired with the other team's best of the previous generation (in competition, Sims' interspecies competition), so they keep adapting to each other. The orange creature is the one being shown; team B's best is under Show">Teams <select id="teams"><option value="1">one population</option><option value="2">two teams</option></select></label>
+    <label data-kind="compete cooperate volley wrestle" title="One population: every creature plays with or against the population's own best of the previous generation. Two teams: two species that never interbreed, each paired with the other team's best of the previous generation (in competition, Sims' interspecies competition), so they keep adapting to each other. The orange creature is the one being shown; team B's best is under Show">Teams <select id="teams"><option value="1">one population</option><option value="2">two teams</option></select></label>
   </div>
   <div class="row" style="margin-top:8px">
     <label title="How much selection rewards bodies unlike the rest of the population (all islands) and past novel bodies. Each island's two fittest always survive. 0 = fitness only">Novelty <select id="novelty"><option value="0">0</option><option value="0.15">0.15</option><option value="0.3" selected>0.3</option><option value="0.5">0.5</option><option value="0.7">0.7</option></select></label>
@@ -168,22 +168,27 @@
     <label title="The goal's radius: the ball is in when its centre is inside the circle">Goal size <input type="number" id="scGoalSize" min="0.1" max="5" step="0.1"> m</label>
     <label title="Share of the score for teamwork: the share of the game both creatures spend touching the ball at once. The rest of the score is shrunk to make room, so a goal still beats no goal. 0 = off">Together bonus <input type="number" id="scTogether" min="0" max="1" step="0.05"></label>
   </div>
-  <div class="row" data-kind="compete cooperate volley" style="margin-top:8px">
+  <div class="row" data-kind="compete cooperate volley lift" style="margin-top:8px">
     <label title="What the two creatures compete for: a ball rolls, so it can be pushed and dribbled; the cube of Sims' paper slides">Prize <select id="scBall"><option value="sphere">ball</option><option value="cube">cube</option></select></label>
     <label title="Ball radius, or half the cube's side">Size <input type="number" id="scBallSize" min="0.05" max="1" step="0.05"> m</label>
     <label title="Mass of the ball or cube">Mass <input type="number" id="scBallMass" min="0.01" max="5" step="0.01"> kg</label>
   </div>
-  <div class="row" data-kind="compete cooperate volley" style="margin-top:8px">
+  <div class="row" data-kind="compete cooperate volley wrestle" style="margin-top:8px">
     <label title="Distance from the prize's centre to the start zone, at ground level">Start distance <input type="number" id="scGap" min="0.5" max="20" step="0.5"> m</label>
     <label title="Sims' start zone: after relaxing, each contestant is moved up to a plane rising from the ground at the start distance, so taller bodies start further back and toppling can't reach the prize. Body length: the longest dimension is added to the start distance. None: near side at the start distance">Start zone <select id="scZone"><option value="plane">Sims' slope</option><option value="length">+ body length</option><option value="none">none</option></select></label>
     <label title="The start zone plane's angle above the ground. 45°: a point at height h starts h further back. 90°: height doesn't matter">Slope <input type="number" id="scSlope" min="10" max="90" step="5">°</label>
   </div>
-  <div class="row" data-kind="compete cooperate volley" style="margin-top:8px">
+  <div class="row" data-kind="compete cooperate volley wrestle" style="margin-top:8px">
     <label title="Contestants bigger than this are scaled down to it; with Same size, smaller ones are scaled up to it too">Volume <input type="number" id="scMaxVolume" min="0.1" max="3" step="0.1"> m³</label>
     <label title="Every contestant is scaled to exactly this volume, up or down, so no one wins by being small or big. Off: the volume is only a cap"><input type="checkbox" id="scSameSize"> Same size</label>
     <label title="With Sims' settling: each creature relaxes on its own, far from the ball and the other creature and with its brain idle, then moves into its start zone. Off: it relaxes against its start zone beside them, already sensing"><input type="checkbox" id="scApart"> Settle apart</label>
     <label data-kind="compete" title="Sims' control bonus: touching the prize on the side away from your own centre of mass (wrapping around it) takes up to its radius off your distance"><input type="checkbox" id="scGrip"> Wrap bonus</label>
     <label data-kind="compete" title="How the final distance to the prize is measured. Centre of mass (Sims): from each contestant's centre of mass to the prize's centre, so getting your whole body to it wins, not just touching it. Nearest part: from the contestant's closest surface, so any touch counts as distance 0">Distance from <select id="scMetric"><option value="surface">nearest part</option><option value="com">centre of mass</option></select></label>
+  </div>
+  <div class="row" data-kind="climb" style="margin-top:8px">
+    <label title="Height of each step">Step height <input type="number" id="scStepHeight" min="0.02" max="1" step="0.01"> m</label>
+    <label title="Depth of each step's tread">Step depth <input type="number" id="scStepDepth" min="0.1" max="3" step="0.05"> m</label>
+    <label title="Number of steps up from the pit">Steps <input type="number" id="scSteps" min="1" max="40" step="1"></label>
   </div>
   <div class="row" style="margin-top:8px"><button id="scReset" title="Restore the default scene">Default scene</button></div>
   <p class="note" id="sceneNote"></p>

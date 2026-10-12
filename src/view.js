@@ -87,6 +87,8 @@ export class View {
     const bt = new THREE.CanvasTexture(bc);
     bt.colorSpace = THREE.SRGBColorSpace;
     this.ballMat = new THREE.MeshStandardMaterial({ map: bt, roughness: 0.45 });
+    // stairs: pale stone
+    this.stairMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: 0.85 });
     // cooperation: the goal, a ring with a faint disc, flat on the ground
     this.goalMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     this.goalFill = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false });
@@ -152,8 +154,11 @@ export class View {
     // competition: room for both contestants at their start distance
     const sc = sims[0].scene;
     const reach = sc.gap + (sc.zone !== 'none' ? 2 * big : big);
-    this.arena = !sims[0].cube ? 0 : sims[0].coop ? reach + sc.goalDist + sc.goalSize : 2 * reach;
-    const gap = sims[0].cube ? Math.max(9, this.arena + 3) : Math.max(3, 2.6 * big);
+    const pair = sims[0].task.pair && !sims[0].wrestle;   // a ball between two creatures
+    this.arena = !pair ? 0 : sims[0].coop ? reach + sc.goalDist + sc.goalSize : 2 * reach;
+    // stairs: each cell holds its whole flight
+    const flight = sims[0].statics ? Math.max(...sims.map(s => Math.max(0, ...(s.statics || []).map(b => Math.abs(b.c[0]) + b.h[0])))) : 0;
+    const gap = pair ? Math.max(9, this.arena + 3) : flight ? 2 * flight + 1 : Math.max(3, 2.6 * big);
     const cols = Math.ceil(Math.sqrt(sims.length));
     this.gridSize = gap * cols;
     sims.forEach((sim, k) => {
@@ -172,6 +177,14 @@ export class View {
         cell.cube.geometry = sim.ballSphere ? this.ballGeo : this.cubeGeo;
         cell.cube.material = sim.ballSphere ? this.ballMat : this.cubeMat;
         cell.cube.scale.setScalar(sim.ballR);
+      }
+      for (const b of sim.statics || []) {
+        const geo = new THREE.BoxGeometry(2 * b.h[0], 2 * b.h[1], 2 * b.h[2]);
+        this.owned.push(geo);
+        const m = new THREE.Mesh(geo, this.stairMat);
+        m.position.fromArray(b.c).add(off);
+        m.castShadow = m.receiveShadow = true;
+        this.add(m);
       }
       if (sim.goal) {
         const R = sim.scene.goalSize, ring = new THREE.RingGeometry(Math.max(0, R - 0.06), R, 64), disc = new THREE.CircleGeometry(R, 64);
@@ -206,7 +219,7 @@ export class View {
       this.focus.copy(goal);
       this.controls.target.copy(this.focus);
       const sim = sims[0];
-      const d = crowd ? Math.max(6, 0.9 * this.gridSize + 2 * big) : sim.cube ? Math.max(3.5, (sim.coop ? 1 : 0.7) * this.arena) : Math.max(4, 3 * big);
+      const d = crowd ? Math.max(6, 0.9 * this.gridSize + 2 * big) : pair ? Math.max(3.5, (sim.coop ? 1 : 0.7) * this.arena) : Math.max(4, 3 * big);
       this.crowdDist = d;
       this.wantDist = undefined;
       if (sim.light && !crowd) {
@@ -305,7 +318,12 @@ export class View {
     if (!cells.length) return null;
     if (cells.length === 1 || cells[this.focusCell]) {
       const cell = cells.length === 1 ? cells[0] : cells[this.focusCell], sim = cell.sim;
-      if (sim.cube) { const t = sim.cube.translation(); return new THREE.Vector3(t.x, t.y, t.z).add(cell.off); }
+      if (sim.cube && sim.task.pair) { const t = sim.cube.translation(); return new THREE.Vector3(t.x, t.y, t.z).add(cell.off); }
+      // wrestling: midway between the two
+      if (sim.wrestle && sim.creatures.length === 2 && sim.creatures.every(c => c.valid)) {
+        const [a, b] = sim.creatures.map(c => c.com());
+        return new THREE.Vector3((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2).add(cell.off);
+      }
       const c0 = sim.creatures.find(c => c.valid);
       return c0 ? new THREE.Vector3().fromArray(c0.com()).add(cell.off) : null;
     }
