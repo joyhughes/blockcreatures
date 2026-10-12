@@ -116,7 +116,7 @@ const RELAX_STILL = 0.5;   // stable: the centre of mass hasn't dropped for this
 const RELAX_MIN = 0.3, RELAX_MAX = 5;   // ... but at least / at most this long
 const BALL_ROLL = 0.02;
 const APART = 50;   // settling apart: each creature this far to the side (m)
-const WRESTLE_SCALE = 2;   // wrestling: pushing the pair this far (m) toward the other's side is a full win
+const WRESTLE_SCALE = 1;   // wrestling: pushed back this much further (m) than the other is a full loss
 const STAIR_MARGIN = 0.3;   // stairs: the pit reaches this far (m) past the creature's widest point
 const LIFT_GAP = 0.3;   // lifting: the cube starts this far (m) beyond the creature's furthest point in +x
 const LIFT_HOLD = 1;   // lifting: the cube's height is averaged over the last this many seconds
@@ -1012,14 +1012,16 @@ export class Sim {
       return cs.map(() => f);
     }
     if (this.wrestle) {
-      // how far the pair's midpoint moved toward the other's start, which is
-      // half of (how far I pushed you back - how far you pushed me back);
-      // WRESTLE_SCALE metres is a full win (2) or loss (0)
+      // how far each ended up behind its own start, along the line between
+      // the starts (pushed back, or backing off); advancing counts for
+      // nothing, or walking past each other would win (it did). How far I
+      // pushed you back minus how far you pushed me: WRESTLE_SCALE metres
+      // is a full win (2) or loss (0)
       const cs = this.creatures;
       if (cs.some((c, i) => !c.valid || this.failed[i]) || !this.track[0].start || !this.track[1].start) return cs.map(() => 0);
       const [ta, tb] = this.track, u0 = sub(tb.start, ta.start), u = scale(u0, 1 / Math.max(1e-9, len(u0)));
-      const m = (dot(sub(ta.last, ta.start), u) + dot(sub(tb.last, tb.start), u)) / 2;
-      const fa = 1 + Math.max(-1, Math.min(1, m / WRESTLE_SCALE));
+      const backA = Math.max(0, -dot(sub(ta.last, ta.start), u)), backB = Math.max(0, dot(sub(tb.last, tb.start), u));
+      const fa = 1 + Math.max(-1, Math.min(1, (backB - backA) / WRESTLE_SCALE));
       return [fa, 2 - fa];
     }
     if (this.volley) {
