@@ -51,7 +51,7 @@ function setTask(key) {
 // competition's prize and start distance... Changing it mid-run re-scores
 // everyone from the next generation, and the creature on screen replays in
 // the new scene straight away.
-const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', lightDist: 'scLightDist',
+const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', buoyancy: 'scBuoyancy', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
   grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether',
   stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing', engage: 'scEngage', bothSides: 'scBothSides' };
@@ -78,8 +78,9 @@ function writeScene(s) {
 function showScene() {
   const t = TASKS[task];
   $('scDuration').placeholder = String(t.duration);
-  for (const el of document.querySelectorAll('[data-env]')) el.hidden = el.dataset.env !== t.env;
+  for (const el of document.querySelectorAll('[data-env]')) el.hidden = !el.dataset.env.split(' ').includes(t.env);
   for (const el of document.querySelectorAll('[data-kind]')) el.hidden = !el.dataset.kind.split(' ').includes(t.kind);
+  $('teamBWrap').hidden = !t.pair || $('teams').value !== '2';
   const s = evolver?.scene;
   $('sceneNote').textContent = !s ? 'This run uses the original scene: timed settling with friction; in competition a 0.8 m cube 1.5 m away.'
     : evolver.sceneGen > 0 ? `Scene changed at generation ${evolver.sceneGen}; fitness before and after isn't comparable.` : '';
@@ -118,6 +119,19 @@ function body() {
   const plan = effPlan() === 'radial' ? { type: 'radial', n: +$('radialN').value } : { type: effPlan() };
   return { plan, round: $('round').checked, minArm: +$('minArm').value };
 }
+// Team B's body with two teams: its own plan, or null for the same as team A's
+function bodyB() {
+  const t = $('planB').value;
+  if (!TASKS[task].pair || $('teams').value !== '2' || !t || t === effPlan()) return null;
+  return { ...body(), plan: t === 'radial' ? { type: 'radial', n: +$('radialN').value } : { type: t } };
+}
+const planName = p => (!p || p.type === 'free' ? 'free' : p.type + (p.n ? ' ×' + p.n : ''));
+// 'team A' / 'team B', with their plans when they differ
+function teamName(k, ev = evolver) {
+  const rb = ev?.rival?.body;
+  if (!rb || rb === ev.body) return k ? 'team B' : 'team A';
+  return `${k ? 'team B' : 'team A'} (${planName(k ? rb.plan : ev.body.plan)})`;
+}
 function showPlan() {
   for (const b of $('plan').children) b.classList.toggle('on', b.dataset.plan === effPlan());
   $('nWrap').hidden = effPlan() !== 'radial';
@@ -126,20 +140,21 @@ function showPlan() {
 }
 for (const b of $('plan').children) b.onclick = () => { if (running || TASKS[task].plan) return; planType = b.dataset.plan; showPlan(); switchRun(); };
 $('radialN').onchange = $('round').onchange = $('minArm').onchange = () => { if (running) return; showPlan(); switchRun(); };
-const setBodyEnabled = on => { for (const el of [...$('plan').children, $('radialN'), $('round'), $('minArm'), $('islands'), $('teams')]) el.disabled = !on; };
+const setBodyEnabled = on => { for (const el of [...$('plan').children, $('radialN'), $('round'), $('minArm'), $('islands'), $('teams'), $('planB')]) el.disabled = !on; };
 
 // Each target and body plan (arm count and round-parts setting included) has
 // its own run: evolution stays within the plan, and switching plans keeps the
 // other plans' runs to come back to. So does Teams in competition and
-// cooperation: one gene pool and two co-evolving teams are separate runs.
+// cooperation: one gene pool and two co-evolving teams are separate runs, and
+// so is each body plan for team B.
 const runs = new Map();
-const runKey = () => task + planTag() + (TASKS[task].pair && $('teams').value === '2' ? '-teams' : '');
+const runKey = () => task + planTag() + (TASKS[task].pair && $('teams').value === '2' ? '-teams' : '') + (bodyB() ? '-vs' + (planTag(bodyB()) || '-free') : '');
 function newRun() {
   running = false;
   $('go').textContent = 'Evolve';
   evolver = new Evolver({
     task, popSize: +$('pop').value, seed: +$('seed').value,
-    evaluate: jobs => pool.run(jobs), body: body(), islands: +$('islands').value,
+    evaluate: jobs => pool.run(jobs), body: body(), bodyB: bodyB(), islands: +$('islands').value,
     novelty: +$('novelty').value, structural: +$('structural').value, migrate: +$('migrate').value,
     scene: readScene(), teams: +$('teams').value,
   });
@@ -202,8 +217,9 @@ $('go').onclick = () => {
 $('reset').onclick = () => { if (running) $('go').click(); newRun(); loadChampion(); };
 $('pop').onchange = $('seed').onchange = $('islands').onchange = () => { if (!running && evolver.gen === 0) newRun(); };
 // the other Teams setting's run, or a new one in the current scene
-$('teams').onchange = () => {
+$('teams').onchange = $('planB').onchange = () => {
   if (running) return;
+  showScene();
   if (runs.has(runKey())) return switchRun();
   newRun(); loadChampion();
 };
@@ -309,12 +325,10 @@ function showGen(gen, user = true) {
     label: (mode === 'ever' ? `best so far: generation ${gen}` : `generation ${gen} best`) + (ti >= 0 ? ` (island ${ti + 1})` : '') };
   // two teams: the creature shown is team A's, facing team B's previous best
   const vs = ['compete', 'wrestle'].includes(TASKS[task].kind) ? 'against' : 'with';
-  if (h.rivalGenome) {
-    r.label = r.label.replace(/best/, 'team A best') + `, ${vs} team B's best of generation ${gen - 1}`;
-    if (gen === 0) r.label = r.label.replace(/team B's best of generation -1/, 'a random team B creature');
-  }
+  const A = teamName(0), B = teamName(1);
+  if (h.rivalGenome) r.label = r.label.replace(/best/, A + ' best') + `, ${vs} ` + (gen ? `${B}'s best of generation ${gen - 1}` : `a random ${B} creature`);
   if (mode === 'rival' && h.rivalGenome) Object.assign(r, { genome: h.rivalGenome, opponent: h.rivalOpponent, fitness: h.rivalBest,
-    label: `generation ${gen} team B best, ${vs} ` + (gen ? `team A's best of generation ${gen - 1}` : 'a random team A creature') });
+    label: `generation ${gen} ${B} best, ${vs} ` + (gen ? `${A}'s best of generation ${gen - 1}` : `a random ${A} creature`) });
   const lp = evolver.lastPop;
   if ((mode === 'top' || mode === 'all') && lp && lp.gen === gen) {
     const m = mode === 'top' ? lp.members.slice(0, 25) : lp.members;
@@ -428,7 +442,9 @@ async function loadChampion() {
     const g = new Evolver({ task, seed: +$('seed').value, body: b }).randomViable();
     const plan = `${b.plan.type}${b.plan.n ? ' ×' + b.plan.n : ''}${b.round ? ', round parts' : ''}${b.minArm ? `, arms ≥ ${b.minArm}` : ''}`;
     $('follow').checked = true;
-    startReplay({ genome: g, scene: evolver.scene, label: `random ${plan} creature, unevolved: press Evolve` });
+    // two teams of different plans: a random team B creature as the partner
+    const bb = bodyB(), o = bb && new Evolver({ task, seed: +$('seed').value + 1, body: bb }).randomViable();
+    startReplay({ genome: g, opponent: o || undefined, scene: evolver.scene, label: o ? `random ${plan} creature v random ${planName(bb.plan)} creature, unevolved: press Evolve` : `random ${plan} creature, unevolved: press Evolve` });
     drawGraph(g);
   }
 }
@@ -437,7 +453,7 @@ async function loadChampion() {
 function refresh() {
   const H = evolver.history;
   $('sGen').textContent = H.length ? H.length - 1 : '–';
-  $('sBest').innerHTML = H.length ? Math.max(...H.map(h => h.best)).toFixed(3) + (evolver.rival ? `<small class="teamB">team B ${Math.max(...H.map(h => h.rivalBest ?? -Infinity)).toFixed(3)}</small>` : '') : '–';
+  $('sBest').innerHTML = H.length ? Math.max(...H.map(h => h.best)).toFixed(3) + (evolver.rival ? `<small class="teamB">${teamName(1)} ${Math.max(...H.map(h => h.rivalBest ?? -Infinity)).toFixed(3)}</small>` : '') : '–';
   $('showRival').hidden = !evolver.rival;
   if (!evolver.rival && $('show').value === 'rival') $('show').value = 'best';
   if (!running) $('sRate').textContent = '–';
@@ -637,7 +653,7 @@ $('save').onclick = () => {
   download(`creatures-${task}-gen${evolver.gen}.json`, JSON.stringify({
     task, seed: evolver.rng && +$('seed').value, popSize: evolver.popSize, gen: evolver.gen,
     history: evolver.history, pop: evolver.pop.map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder })), opponent: evolver.opponent,
-    body: evolver.body, islands: evolver.islands, novelty: evolver.novelty, structural: evolver.structural, migrate: evolver.migrate,
+    body: evolver.body, bodyB: evolver.rival && evolver.rival.body !== evolver.body ? evolver.rival.body : null, islands: evolver.islands, novelty: evolver.novelty, structural: evolver.structural, migrate: evolver.migrate,
     scene: evolver.scene, teams: evolver.teams, champ: evolver.champ,
     rival: evolver.rival && { history: evolver.rival.history, gen: evolver.rival.gen, champ: evolver.rival.champ, opponent: evolver.rival.opponent,
       pop: evolver.rival.pop.map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder })) },
@@ -662,6 +678,7 @@ $('load').onchange = async e => {
   $('minArm').value = String(b.minArm || 0);
   $('islands').value = String(d.islands || 1);
   $('teams').value = String(d.teams || 1);
+  $('planB').value = d.bodyB?.plan.type || '';
   $('novelty').value = String(d.novelty ?? 0); $('structural').value = String(d.structural ?? 0); $('migrate').value = String(d.migrate ?? 10);
   showPlan();
   newRun();

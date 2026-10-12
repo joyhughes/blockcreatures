@@ -62,6 +62,16 @@ export class View {
     this.motes = new THREE.Points(pg, new THREE.PointsMaterial({ color: 0xcfe9ff, size: 0.04, transparent: true, opacity: 0.6 }));
     this.scene.add(this.motes);
 
+    // surface water: a translucent sea at y = 0, with a grid to show speed
+    const st = this.checker();
+    st.wrapS = st.wrapT = THREE.RepeatWrapping;
+    st.repeat.set(200, 200);
+    this.sea = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ map: st, color: 0x3d8fc4, roughness: 0.25,
+      metalness: 0.1, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
+    this.sea.rotation.x = -Math.PI / 2;
+    this.sea.receiveShadow = true;
+    this.scene.add(this.sea);
+
     // light source for following, cube for competition
     this.light = new THREE.Mesh(new THREE.SphereGeometry(0.18, 24, 16), new THREE.MeshBasicMaterial({ color: 0xfff3a0 }));
     this.lightGlow = new THREE.PointLight(0xfff0a0, 3, 12);
@@ -121,9 +131,10 @@ export class View {
 
   setEnv(env) {
     this.env = env;
-    const water = env === 'water';
-    this.ground.visible = !water;
+    const water = env === 'water', surface = env === 'surface';
+    this.ground.visible = env === 'land';
     this.motes.visible = water;
+    this.sea.visible = surface;
     this.scene.background = new THREE.Color(water ? 0x0d3b5c : 0xa9c4d8);
     this.scene.fog = water ? new THREE.FogExp2(0x0d3b5c, 0.06) : new THREE.Fog(0xa9c4d8, 25, 90);
   }

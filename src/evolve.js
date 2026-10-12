@@ -42,8 +42,9 @@ export class Evolver {
   // teams (competition): 1 = one population playing its own previous best;
   // 2 = two species that never interbreed, each scored against the other's
   // best of the previous generation (Sims' interspecies competition). Team B
-  // is a second Evolver in `rival`; this one is team A.
-  constructor({ task, popSize = 300, survival = 0.2, seed = 1, evaluate, body = {}, islands = 1, migrate = 10, novelty = 0, structural = 0, scene = null, teams = 1 }) {
+  // is a second Evolver in `rival`; this one is team A. bodyB: team B's body
+  // (its own plan, so snakes can play insects); null = the same as team A's.
+  constructor({ task, popSize = 300, survival = 0.2, seed = 1, evaluate, body = {}, bodyB = null, islands = 1, migrate = 10, novelty = 0, structural = 0, scene = null, teams = 1 }) {
     this.body = body;
     this.scene = scene;   // sim scene parameters (sim.js SCENE); null = the legacy scene
     this.islands = Math.max(1, Math.min(islands, Math.floor(popSize / 10)));
@@ -63,7 +64,7 @@ export class Evolver {
     this.opponent = null;   // competition and cooperation: best of the previous generation
     this.champ = null;      // this population's best of the latest generation
     this.teams = teams === 2 && TASKS[task].pair ? 2 : 1;
-    this.rival = this.teams === 2 ? new Evolver({ task, popSize, survival, seed: seed * 7919 + 101, evaluate, body, islands, migrate, novelty, structural, scene }) : null;
+    this.rival = this.teams === 2 ? new Evolver({ task, popSize, survival, seed: seed * 7919 + 101, evaluate, body: bodyB || body, islands, migrate, novelty, structural, scene }) : null;
     if (this.rival) this.rival.team = 1;
   }
 
@@ -123,7 +124,8 @@ export class Evolver {
     }
     for (const p of this.pop) p.founder = p.id;
     this.assignIslands();
-    this.rival?.seedFrom(g);
+    // team B of another plan can't descend from team A's creature
+    if (this.rival) this.rival.inPlan(g) ? this.rival.seedFrom(g) : this.rival.seed();
   }
 
   // Run one generation: evaluate, record, select, reproduce. With two teams,

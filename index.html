@@ -127,6 +127,7 @@
     <label>Seed <input type="number" id="seed" value="1" min="1"></label>
     <label title="Sub-populations that select and mate separately; each island's best migrates to the next every 10 generations. 1 = Sims' single population">Islands <select id="islands"><option>1</option><option>2</option><option>4</option><option selected>6</option><option>8</option><option>12</option></select></label>
     <label data-kind="compete cooperate volley wrestle" title="One population: every creature plays with or against the population's own best of the previous generation. Two teams: two species that never interbreed, each paired with the other team's best of the previous generation (in competition, Sims' interspecies competition), so they keep adapting to each other. The orange creature is the one being shown; team B's best is under Show">Teams <select id="teams"><option value="1">one population</option><option value="2">two teams</option></select></label>
+    <label id="teamBWrap" hidden title="Team B's body plan: the same as team A's (above), or another one, so different animals evolve against or with each other (snake v insect). Radial uses the Arms count above; Round parts and Min arm apply to both teams">Team B <select id="planB"><option value="">same plan</option><option value="free">Free</option><option value="bilateral">Bilateral</option><option value="radial">Radial</option><option value="snake">Snake</option><option value="quadruped">Quadruped</option><option value="insect">Insect</option><option value="arachnid">Arachnid</option><option value="crustacean">Crustacean</option><option value="centipede">Centipede</option><option value="biped">Biped</option></select></label>
   </div>
   <div class="row" style="margin-top:8px">
     <label title="How much selection rewards bodies unlike the rest of the population (all islands) and past novel bodies. Each island's two fittest always survive. 0 = fitness only">Novelty <select id="novelty"><option value="0">0</option><option value="0.15">0.15</option><option value="0.3" selected>0.3</option><option value="0.5">0.5</option><option value="0.7">0.7</option></select></label>
@@ -164,10 +165,11 @@
   <h2>Scene</h2>
   <div class="row" id="scene">
     <label title="Seconds each creature is scored for, after settling. Blank = this target's default">Lifespan <input type="number" id="scDuration" min="2" max="60" step="1"> s</label>
-    <label data-env="land" title="Gravity on land, m/s². Earth 9.81, Moon 1.62, Mars 3.71">Gravity <input type="number" id="scGravity" min="0.5" max="30" step="0.1"></label>
+    <label data-env="land surface" title="Gravity on land and at the water surface, m/s². Earth 9.81, Moon 1.62, Mars 3.71">Gravity <input type="number" id="scGravity" min="0.5" max="30" step="0.1"></label>
     <label data-env="land" title="Friction between bodies and the ground (and the ball). Low = icy">Friction <input type="number" id="scFriction" min="0" max="3" step="0.1"></label>
     <label data-env="land" title="Before scoring, on land. Sims: relax with no friction and no muscles until the centre of mass stops dropping, so toppling can't carry a body forward. Timed: a fixed settle time with friction (this project's earlier behaviour)">Settle <select id="scSettle"><option value="stable">Sims: relax until still</option><option value="timed">timed, with friction</option></select></label>
-    <label data-env="water" title="Water viscosity: how hard the water pushes back on a moving part">Viscosity <input type="number" id="scDrag" min="0.2" max="20" step="0.2"></label>
+    <label data-env="water surface" title="Water viscosity: how hard the water pushes back on a moving part">Viscosity <input type="number" id="scDrag" min="0.2" max="20" step="0.2"></label>
+    <label data-env="surface" title="Water's density relative to the creatures'. 1.5: a creature floats about two thirds under; near 1 it barely floats; below 1 it sinks">Buoyancy <input type="number" id="scBuoyancy" min="0.5" max="5" step="0.1"></label>
     <label data-kind="follow" title="How far away the light starts">Light distance <input type="number" id="scLightDist" min="1" max="30" step="0.5"> m</label>
   </div>
   <div class="row" data-kind="cooperate" style="margin-top:8px">

@@ -8,6 +8,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Target | Environment | Fitness (as in Sims) |
 |---|---|---|
 | Swimming | water: no gravity, viscous drag on every face | COM speed: ½ × max distance from start / T + ½ × speed over the final third (rewards straight, sustained motion) |
+| Surface swimming (beyond Sims) | water surface: gravity, buoyancy, drag only under water, air above | as swimming, horizontal; measured after 2 s afloat with the muscles off |
 | Walking | land: gravity, ground friction | same, horizontal, measured after the body has relaxed (see below) so falling over doesn't count |
 | Jumping | land | maximum height reached by the *lowest* part of the creature |
 | Following (water / land) | either | closing speed toward a light source, averaged over 3 trials with the light in different directions; per-block photosensors |
@@ -343,6 +344,22 @@ evaluation time. Replays show the first side, so a replay's final score can
 differ from the averaged fitness. Runs from before the setting score one
 side.
 
+## Surface swimming
+
+Sims' water has no gravity and no surface. Surface swimming adds both: the
+creature floats in water whose density (Scene: *Buoyancy*, default 1.5 × the
+creatures') holds it about two thirds under. Its speed counts only
+horizontally, so leaping and diving are allowed but only pay if they carry it
+along. Buoyancy acts on a 3×3×3 grid of sample points inside each part, each
+carrying an equal share of the part's volume. A point's buoyancy fades in over
+the top 5 cm of water, which makes it a conservative force with a potential,
+and the energy audit counts that potential. Viscous drag uses the face samples
+of deep-water swimming, scaled by how far under water each one is, so parts in
+the air move freely. A face whose centre is under water triggers its contact
+sensor, so a creature can feel the surface. Creatures start at the depth a
+uniform box would float at and settle for 2 s with their muscles off before
+measuring starts.
+
 ## Two teams
 
 In competition and cooperation, **Teams** (Evolution panel) chooses who a
@@ -365,6 +382,16 @@ each team's islands among themselves. One population and two teams are
 separate runs, like body plans: switching Teams (while paused) keeps the other
 setting's run to come back to, and a new one starts in the current scene.
 Save and Load keep both teams.
+
+**Team B** (shown with two teams) gives team B its own body plan, so different
+animals evolve against or with each other: snake v insect, crustacean v
+arachnid, a radial creature v a biped. It defaults to *same plan*. Radial uses
+the Arms count, and Round parts and Min arm apply to both teams. Each team
+stays within its own plan. When the run is seeded from a creature (Evolve from
+this), team B starts from random creatures if that creature isn't in team B's
+plan. Each team B plan is a separate run, and labels name the plans (`team A
+(snake) best, against team B (insect)'s best of generation 4`). Before the first
+generation, the view shows a random creature of each plan.
 
 ## Scene
 
@@ -445,11 +472,13 @@ node tools/regress.mjs                                         # bundled champio
 node tools/cdp.mjs <url> out.png [waitMs] [js]                 # headless Chrome screenshot
 ```
 
-Tasks: `swim walk jump followWater followLand compete cooperate`. Env: `ISLANDS=K`
+Tasks: `swim surfaceSwim walk jump followWater followLand compete cooperate volley wrestle stairs lift biped quadruped`. Env: `ISLANDS=K`
 (default 6; 1 = single population), `MIN_ARM=k`, `SEED_FROM=file`,
 `SCENE='{"gap":4,"duration":15}'` (scene overrides, see `SCENE` in `src/sim.js`),
 `LEGACY=1` (the old cube scene), `TEAMS=2` (competition between two
-species; team B's history is saved as `rivalHistory`); e.g.
+species; team B's history and population are saved as `rivalHistory` and
+`rivalPop`), `TEAM_B=<plan>` (two teams with team B in another plan, e.g.
+`TEAM_B=insect node tools/evolve.mjs compete 150 300 1 snake`); e.g.
 `MIN_ARM=4 node tools/evolve.mjs swim 150 300 1 radial8 round`. Body plans for the
 headless runner: `node tools/evolve.mjs walk 150 300 1 bilateral round` (plan
 `free | bilateral | radialN | snake | quadruped | insect | arachnid | crustacean | centipede | biped`, then `round` to allow capsules and spheres;

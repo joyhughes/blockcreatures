@@ -36,6 +36,8 @@ export const PHYS = {
 
 export const TASKS = {
   swim: { label: 'Swimming', env: 'water', duration: 10, settle: 0, trials: 1, kind: 'speed' },
+  // at the surface: gravity and buoyancy, water below and air above
+  surfaceSwim: { label: 'Surface swimming', env: 'surface', duration: 10, settle: 2, trials: 1, kind: 'speed' },
   walk: { label: 'Walking', env: 'land', duration: 10, settle: 1.5, trials: 1, kind: 'speed' },
   jump: { label: 'Jumping', env: 'land', duration: 6, settle: 1.5, trials: 1, kind: 'jump' },
   followWater: { label: 'Following (water)', env: 'water', duration: 8, settle: 0, trials: 3, kind: 'follow' },
@@ -78,6 +80,8 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright']
 //   duration   seconds measured after settling (null = the task's own)
 //   gravity    m/s^2 on land          friction   ground and body friction
 //   drag       water viscosity        lightDist  light's distance (following)
+//   buoyancy   surface swimming: water's density relative to the creatures' (1.5 floats a
+//              creature about two thirds under)
 //   ball       'sphere' | 'cube' | 'barbell' (lifting: a bar between two plates, the bar
 //              off the ground so a part can get under it)
 //              ballSize   radius / half side (m); a barbell's plate radius
@@ -108,7 +112,7 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright']
 //   together   cooperation: the share of the score (0..1) given for the share of the measured time
 //              both creatures touch the ball at once
 export const SCENE = {
-  duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
+  duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6, buoyancy: 1.5,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
   stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
@@ -132,6 +136,11 @@ const BALL_ROLL = 0.02;
 const APART = 50;   // settling apart: each creature this far to the side (m)
 const WRESTLE_SCALE = 1;   // wrestling: this much further (m) outside the ring than the other is a full loss
 const WRESTLE_CENTRE = 0.5;   // wrestling: weight of holding the middle (mean distance from it, in ring radii)
+const BUOY_BAND = 0.05;   // surface water: buoyancy on a sample point fades in over this depth (m)
+// share of a sample point's buoyancy at height y (0 above the band, 1 below),
+// and its potential: dP/dy = -wet(y), so buoyancy is conservative
+const wet = y => Math.max(0, Math.min(1, 0.5 - y / BUOY_BAND));
+const wetP = y => (y <= -BUOY_BAND / 2 ? -y : y >= BUOY_BAND / 2 ? 0 : (BUOY_BAND / 2 - y) ** 2 / (2 * BUOY_BAND));
 const STAIR_MARGIN = 0.3;   // stairs: the pit reaches this far (m) past the creature's widest point
 const STAIR_TOP = 10;   // stairs: the top step is a plateau this wide (m), so climbing over it can't fall off the far side
 const LIFT_GAP = 0.3;   // lifting: the cube starts this far (m) beyond the creature's furthest point in +x
@@ -245,10 +254,14 @@ export class Creature {
       const len = opts.clearBody ? Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) : 0;
       pos[0] = opts.side * (opts.clear + len + hi[0]);
     }
-    if (opts.ground) {
-      let minY = Infinity;
-      for (const p of parts) minY = Math.min(minY, p.center[1] - support(p, p.R, [0, 1, 0]));
-      pos[1] = -minY + 0.02;
+    if (opts.ground || opts.float) {
+      let minY = Infinity, maxY = -Infinity;
+      for (const p of parts) {
+        minY = Math.min(minY, p.center[1] - support(p, p.R, [0, 1, 0]));
+        maxY = Math.max(maxY, p.center[1] + support(p, p.R, [0, 1, 0]));
+      }
+      // floating: as deep as a box of uniform density would (1 / buoyancy of its height)
+      pos[1] = opts.float ? -minY - (maxY - minY) / opts.float : -minY + 0.02;
     }
     this.q0 = q0; this.pos0 = pos;
 
@@ -597,7 +610,8 @@ export class Creature {
   // area and normal speed. The normal speed varies across a face when the
   // block rotates, so it is sampled on a 3x3 grid; the force and torque are
   // summed per body and applied once.
-  drag() {
+  // At the surface (`surface`), only the submerged share of each sample counts.
+  drag(surface = false) {
     const F = [], T = [];
     for (let b = 0; b < this.nb; b++) { F.push([0, 0, 0]); T.push([0, 0, 0]); }
     for (let i = 0; i < this.parts.length; i++) {
@@ -619,7 +633,9 @@ export class Creature {
               ];
               const vn = s * dot(add(v0, cross(w, r)), n);
               if (vn <= 0) continue;
-              const f = scale(n, -s * this.dragK * dA * vn);
+              const under = surface ? wet(com[1] + r[1]) : 1;
+              if (under <= 0) continue;
+              const f = scale(n, -s * this.dragK * dA * vn * under);
               F[b] = add(F[b], f);
               T[b] = add(T[b], cross(r, f));
             }
@@ -630,6 +646,66 @@ export class Creature {
     for (let b = 0; b < this.nb; b++) {
       this.bodies[b].applyImpulse(V(scale(F[b], DT)), true);
       this.bodies[b].applyTorqueImpulse(V(scale(T[b], DT)), true);
+    }
+  }
+
+  // Surface water: buoyancy. Each part is sampled on a 3x3x3 grid (points
+  // inside its shape), each point carrying an equal share of the part's
+  // volume; a submerged point is pushed up by rho * g * its volume. The force
+  // fades in across BUOY_BAND at the surface, and buoyEnergy is its potential,
+  // so the energy audit covers it.
+  buoySamples() {
+    if (this.bs) return this.bs;
+    this.bs = this.parts.map(p => {
+      const pts = [];
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+        const l = [a * p.half[0] * 2 / 3, b * p.half[1] * 2 / 3, c * p.half[2] * 2 / 3];
+        if (surfaceDist(p, l) === 0) pts.push(l);
+      }
+      const v = massProps(p).m / pts.length;
+      return pts.map(l => ({ l, v }));
+    });
+    return this.bs;
+  }
+  buoy(rho, g) {
+    const F = [], T = [], bs = this.buoySamples();
+    for (let b = 0; b < this.nb; b++) { F.push(0); T.push([0, 0, 0]); }
+    for (let i = 0; i < this.parts.length; i++) {
+      const b = this.partBody[i], { c, q } = this.partPose(i), com = this.bc[b];
+      for (const { l, v } of bs[i]) {
+        const pt = add(c, qrot(q, l)), u = wet(pt[1]);
+        if (u <= 0) continue;
+        const f = rho * g * v * u, r = sub(pt, com);
+        F[b] += f;
+        T[b] = add(T[b], cross(r, [0, f, 0]));
+      }
+    }
+    for (let b = 0; b < this.nb; b++) {
+      this.bodies[b].applyImpulse({ x: 0, y: F[b] * DT, z: 0 }, true);
+      this.bodies[b].applyTorqueImpulse(V(scale(T[b], DT)), true);
+    }
+  }
+  buoyEnergy(rho, g) {
+    let e = 0;
+    const bs = this.buoySamples();
+    for (let i = 0; i < this.parts.length; i++) {
+      const { c, q } = this.partPose(i);
+      for (const { l, v } of bs[i]) e += rho * g * v * wetP(c[1] + qrot(q, l)[1]);
+    }
+    return e;
+  }
+  // Surface water: a face whose centre is under water feels it, on the
+  // face's contact sensor, the way a face touching the ground does
+  feelWater() {
+    const S = this.sens;
+    for (let i = 0; i < this.parts.length; i++) {
+      const p = this.parts[i], { c, q } = this.partPose(i);
+      for (let k = 0; k < 3; k++) for (const sg of [1, -1]) {
+        const l = [0, 0, 0]; l[k] = sg * p.half[k];
+        if (c[1] + qrot(q, l)[1] >= 0) continue;
+        const s = sg * (k === 2 ? p.d : 1);
+        S[i * NSENS + 3 + 2 * k + (s > 0 ? 0 : 1)] = 1;
+      }
     }
   }
 
@@ -664,7 +740,9 @@ export class Sim {
     this.taskName = taskName;
     this.T = sc.duration;
     const land = task.env === 'land';
-    this.g = land ? sc.gravity : 0;
+    // surface water has gravity too (the scene's); deep water has none
+    this.surface = task.env === 'surface';
+    this.g = land || this.surface ? sc.gravity : 0;
     // Sims' settling: relax with no friction and no muscles until the centre
     // of mass stops dropping; toppling then can't carry the body anywhere
     this.relaxing = land && sc.settle === 'stable';
@@ -719,7 +797,7 @@ export class Sim {
         this.creatures.forEach((c, i) => { if (c.valid) c.shift([0, 0, this.apart[i]]); });
       }
     } else {
-      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land }));
+      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land, float: this.surface ? sc.buoyancy : 0 }));
       if (task.kind === 'climb') this.buildStairs();
       // lifting: the cube appears when measuring starts (addBall), so the
       // creature can't settle onto it; its height over the last LIFT_HOLD s
@@ -855,6 +933,7 @@ export class Sim {
       if (this.coop) other = this.goal;
       else if (task.pair && cs[1 - i] && cs[1 - i].valid) other = cs[1 - i].com();
       c.sense(world, target, other);   // joint angles and rates too, for limits and damping
+      if (this.surface) c.feelWater();
       // settling apart, the brain waits: its senses are from the wrong place
       if (!this.apart) {
         brainStep(c.brain, DT / 2);
@@ -862,6 +941,7 @@ export class Sim {
       }
       c.actuate(active);
       if (task.env === 'water') c.drag();
+      else if (this.surface) { c.drag(true); c.buoy(this.scene.buoyancy, this.g); }
       else c.roll(this.g);
     }
     if (this.ballSphere) this.ballRoll();
@@ -969,7 +1049,7 @@ export class Sim {
 
   energy() {
     let e = 0;
-    this.creatures.forEach(c => { if (c.valid) e += c.fullEnergy(this.g); });
+    this.creatures.forEach(c => { if (c.valid) e += c.fullEnergy(this.g) + (this.surface ? c.buoyEnergy(this.scene.buoyancy, this.g) : 0); });
     if (this.cube) {
       const v = this.cube.linvel(), w = this.cube.angvel(), m = this.cube.mass();
       e += m * (0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + this.g * this.cube.translation().y);
@@ -1002,7 +1082,7 @@ export class Sim {
     }
     if (task.kind === 'speed') {
       let p = c.com();
-      if (task.env === 'land') p = [p[0], 0, p[2]];
+      if (task.env !== 'water') p = [p[0], 0, p[2]];   // on land and at the surface, horizontal
       if (!tr.start) tr.start = p;
       tr.maxDist = Math.max(tr.maxDist, len(sub(p, tr.start)));
       if (!tr.mark && elapsed >= this.T * 2 / 3) { tr.mark = p; tr.yMark = tr.minYMark = y; }
