@@ -185,6 +185,9 @@
     <label data-kind="compete" title="Sims' control bonus: touching the prize on the side away from your own centre of mass (wrapping around it) takes up to its radius off your distance"><input type="checkbox" id="scGrip"> Wrap bonus</label>
     <label data-kind="compete" title="How the final distance to the prize is measured. Centre of mass (Sims): from each contestant's centre of mass to the prize's centre, so getting your whole body to it wins, not just touching it. Nearest part: from the contestant's closest surface, so any touch counts as distance 0">Distance from <select id="scMetric"><option value="surface">nearest part</option><option value="com">centre of mass</option></select></label>
   </div>
+  <div class="row" data-kind="wrestle" style="margin-top:8px">
+    <label title="Radius of the sumo ring around the middle: the further a wrestler's centre of mass gets outside it, the worse it scores">Ring radius <input type="number" id="scRing" min="0.5" max="10" step="0.25"> m</label>
+  </div>
   <div class="row" data-kind="climb" style="margin-top:8px">
     <label title="Height of each step">Step height <input type="number" id="scStepHeight" min="0.02" max="1" step="0.01"> m</label>
     <label title="Depth of each step's tread">Step depth <input type="number" id="scStepDepth" min="0.1" max="3" step="0.05"> m</label>

@@ -91,13 +91,14 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift'];
 //   goalDist   cooperation: the goal's centre, this far from the ball's start (m), away from the creatures
 //   goalSize   cooperation: the goal's radius; the ball is in when its centre is inside
 //   stepHeight, stepDepth, steps   stairs: each step's rise and tread (m), and how many
+//   ring       wrestling: the ring's radius (m) around the middle
 //   together   cooperation: the share of the score (0..1) given for the share of the measured time
 //              both creatures touch the ball at once
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
-  stepHeight: 0.15, stepDepth: 0.4, steps: 12,
+  stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
 export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false };
@@ -116,7 +117,7 @@ const RELAX_STILL = 0.5;   // stable: the centre of mass hasn't dropped for this
 const RELAX_MIN = 0.3, RELAX_MAX = 5;   // ... but at least / at most this long
 const BALL_ROLL = 0.02;
 const APART = 50;   // settling apart: each creature this far to the side (m)
-const WRESTLE_SCALE = 1;   // wrestling: pushed back this much further (m) than the other is a full loss
+const WRESTLE_SCALE = 1;   // wrestling: this much further (m) outside the ring than the other is a full loss
 const STAIR_MARGIN = 0.3;   // stairs: the pit reaches this far (m) past the creature's widest point
 const STAIR_TOP = 10;   // stairs: the top step is a plateau this wide (m), so climbing over it can't fall off the far side
 const LIFT_GAP = 0.3;   // lifting: the cube starts this far (m) beyond the creature's furthest point in +x
@@ -675,6 +676,7 @@ export class Sim {
       if ((this.volley = task.kind === 'volley')) Object.assign(this, { passes: 0, lastTouch: -1, lastPos: null, touched: [false, false] });
       this.wrestle = task.kind === 'wrestle';
       if (!this.wrestle) this.addBall([0, 0, 0]);
+      else this.ring = sc.ring;
       this.creatures = genomes.map((g, i) => new Creature(world, g, { ...copts,
         ground: true, maxVolume: sc.maxVolume, sameSize: sc.sameSize,
         side: i && !coop ? 1 : -1, yaw: i && !coop ? Math.PI : 0,
@@ -954,9 +956,11 @@ export class Sim {
       if (tr.start === null) tr.start = d;
       tr.last = d;
     } else if (task.kind === 'wrestle') {
-      const p = c.com();
-      if (!tr.start) tr.start = [p[0], 0, p[2]];
-      tr.last = [p[0], 0, p[2]];
+      // furthest its centre of mass got outside the ring, or outside its
+      // start if that was further out (a tall body starts further back)
+      const p = c.com(), r = Math.hypot(p[0], p[2]);
+      if (tr.edge === undefined) tr.edge = Math.max(this.ring, r);
+      tr.maxOut = Math.max(tr.maxOut || 0, r - tr.edge);
     } else if (task.kind === 'climb') {
       tr.last = y; tr.low = c.lowest();
     } else if (task.kind === 'cooperate' || task.kind === 'volley' || (task.kind === 'lift' && this.cube)) {
@@ -1018,16 +1022,15 @@ export class Sim {
       return cs.map(() => f);
     }
     if (this.wrestle) {
-      // how far each ended up behind its own start, along the line between
-      // the starts (pushed back, or backing off); advancing counts for
-      // nothing, or walking past each other would win (it did). How far I
-      // pushed you back minus how far you pushed me: WRESTLE_SCALE metres
-      // is a full win (2) or loss (0)
+      // sumo: how far each one's centre of mass ever got outside the ring
+      // (or its own start, if further out);
+      // further out than the other by WRESTLE_SCALE metres is a full loss
+      // (0) and win (2). Scoring advances, then distance pushed back from
+      // the start, both let them walk straight past each other.
       const cs = this.creatures;
-      if (cs.some((c, i) => !c.valid || this.failed[i]) || !this.track[0].start || !this.track[1].start) return cs.map(() => 0);
-      const [ta, tb] = this.track, u0 = sub(tb.start, ta.start), u = scale(u0, 1 / Math.max(1e-9, len(u0)));
-      const backA = Math.max(0, -dot(sub(ta.last, ta.start), u)), backB = Math.max(0, dot(sub(tb.last, tb.start), u));
-      const fa = 1 + Math.max(-1, Math.min(1, (backB - backA) / WRESTLE_SCALE));
+      if (cs.some((c, i) => !c.valid || this.failed[i])) return cs.map(() => 0);
+      const [oa, ob] = this.track.map(tr => tr.maxOut || 0);
+      const fa = 1 + Math.max(-1, Math.min(1, (ob - oa) / WRESTLE_SCALE));
       return [fa, 2 - fa];
     }
     if (this.volley) {

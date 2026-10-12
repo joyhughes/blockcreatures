@@ -186,13 +186,14 @@ export class View {
         m.castShadow = m.receiveShadow = true;
         this.add(m);
       }
-      if (sim.goal) {
-        const R = sim.scene.goalSize, ring = new THREE.RingGeometry(Math.max(0, R - 0.06), R, 64), disc = new THREE.CircleGeometry(R, 64);
+      // the cooperation goal, or the wrestling ring
+      if (sim.goal || sim.ring) {
+        const R = sim.goal ? sim.scene.goalSize : sim.ring, at = sim.goal || [0, 0, 0], ring = new THREE.RingGeometry(Math.max(0, R - 0.06), R, 64), disc = new THREE.CircleGeometry(R, 64);
         this.owned.push(ring, disc);
         for (const [geo, mat, y] of [[disc, this.goalFill, 0.004], [ring, this.goalMat, 0.006]]) {
           const m = new THREE.Mesh(geo, mat);
           m.rotation.x = -Math.PI / 2;
-          m.position.set(sim.goal[0], y, sim.goal[2]).add(off);
+          m.position.set(at[0], y, at[2]).add(off);
           this.add(m);
         }
       }
@@ -219,7 +220,7 @@ export class View {
       this.focus.copy(goal);
       this.controls.target.copy(this.focus);
       const sim = sims[0];
-      const d = crowd ? Math.max(6, 0.9 * this.gridSize + 2 * big) : pair ? Math.max(3.5, (sim.coop ? 1 : 0.7) * this.arena) : Math.max(4, 3 * big);
+      const d = crowd ? Math.max(6, 0.9 * this.gridSize + 2 * big) : pair ? Math.max(3.5, (sim.coop ? 1 : 0.7) * this.arena) : sim.ring ? Math.max(4, 1.6 * sim.ring + 2 * big) : Math.max(4, 3 * big);
       this.crowdDist = d;
       this.wantDist = undefined;
       if (sim.light && !crowd) {
