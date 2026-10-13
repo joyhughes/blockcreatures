@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+const SKI_HALF = [0.3, 0.01, 0.045];   // as sim.js SKI.half
 const add3 = (a, d, k) => [a[0] + d[0] * k, a[1] + d[1] * k, a[2] + d[2] * k];
 const PALETTE = [0xe8b04a, 0x4fa3d9, 0xd9534f, 0x6cbf6a, 0xb07ad9, 0xe07a3f, 0x4fc1b8, 0xd96fa3, 0x9aa64a, 0x7a8cd9, 0xc9a27a, 0x5f9e8f];
 const OPPONENT = [0x8a8f99, 0x6d727c, 0xa3a8b0];
@@ -114,6 +115,7 @@ export class View {
     this.cells = [];
     this.boxGeo = new THREE.BoxGeometry(1, 1, 1);
     this.eyeGeo = new THREE.SphereGeometry(1, 16, 12);
+    this.skiMat = new THREE.MeshStandardMaterial({ color: 0xd8473a, roughness: 0.4 });
     this.eyeMat = new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.3 });
     this.pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
     this.tmpV = new THREE.Vector3();
@@ -166,6 +168,9 @@ export class View {
     if (!Array.isArray(sims)) sims = [sims];
     this.sim = sims[0];
     this.setEnv(sims[0].task.env);
+    // skiing: the physics runs on flat ground with gravity tilted downhill
+    // (+X); tilting the whole picture back makes the ground a slope
+    this.scene.rotation.z = -(sims[0].hill || 0);
     const crowd = sims.length > 1;
     // grid spacing from the largest creature
     const sizeOf = sim => { const c = sim.creatures.find(c => c.valid); return c ? Math.max(...c.parts.map(p => Math.hypot(...p.center) + Math.max(...p.half))) : 1; };
@@ -318,6 +323,16 @@ export class View {
         this.meshes.push(mesh);
         cell.meshes.push(mesh);
       });
+      // skis: planks fixed to the foot's body
+      for (const ski of c.skis || []) {
+        const mesh = new THREE.Mesh(this.boxGeo, this.skiMat);
+        mesh.scale.set(2 * SKI_HALF[0], 2 * SKI_HALF[1], 2 * SKI_HALF[2]);
+        mesh.castShadow = true;
+        mesh.userData = { creature: ci, body: ski.body, local: ski.at, eye: true };
+        this.scene.add(mesh);
+        this.meshes.push(mesh);
+        cell.meshes.push(mesh);
+      }
       // eyes: a white ball set into each side of the head, its pupil on the gaze
       for (const eye of c.eyes || []) {
         for (const [r, at, mat] of [[eye.r, eye.pos, this.eyeMat], [eye.r * 0.55, add3(eye.pos, eye.gaze, eye.r * 0.6), this.pupilMat]]) {
@@ -356,7 +371,12 @@ export class View {
 
   // what the camera follows: the cube in competition, else the creature, or
   // in a crowd the middle of the grid plus the creatures' average drift
+  // the camera's target, in the picture (tilted with the scene for skiing)
   goal() {
+    const g = this.goalRaw();
+    return g ? g.applyQuaternion(this.scene.quaternion) : g;
+  }
+  goalRaw() {
     const cells = this.cells;
     if (!cells.length) return null;
     if (cells.length === 1 || cells[this.focusCell]) {
@@ -384,8 +404,9 @@ export class View {
     for (const cell of this.cells) {
       const { sim, off } = cell;
       for (const m of cell.meshes) {
-        const { creature, part, local } = m.userData;
-        const { c, q } = sim.creatures[creature].partPose(part);
+        const { creature, part, local, body } = m.userData;
+        const cr = sim.creatures[creature];
+        const { c, q } = body === undefined ? cr.partPose(part) : (b => { const t = b.translation(); return { c: [t.x, t.y, t.z], q: b.rotation() }; })(cr.bodies[body]);
         m.quaternion.set(q.x, q.y, q.z, q.w);
         m.position.set(c[0] + off.x, c[1] + off.y, c[2] + off.z);
         if (local) m.position.add(this.tmpV.fromArray(local).applyQuaternion(m.quaternion));

@@ -82,6 +82,9 @@ export const TASKS = {
   // random direction (two opposite ones, re-drawn each generation) and
   // knocks the creature over; it scores for standing again
   knock: { label: 'Knocked down', env: 'land', duration: 12, settle: 1, trials: 2, kind: 'knock', scene: { settle: 'timed' } },
+  // skis on every foot, down a snowy hill (scene hill; 0 = skating on ice):
+  // as far downhill (or, on the flat, as far) as it gets without falling
+  ski: { label: 'Skiing', env: 'land', duration: 10, settle: 1, trials: 1, kind: 'ski', scene: { settle: 'timed', friction: 0.08 } },
   // stand as long and as tall as it can, under walking's fall rules
   stand: { label: 'Standing', env: 'land', duration: 10, settle: 1, trials: 1, kind: 'stand', scene: { settle: 'timed' } },
   // stand up from lying or sitting (scene `start`), and stay up
@@ -90,7 +93,7 @@ export const TASKS = {
     scene: { ball: 'barbell', ballSize: 0.2, ballMass: 0.3, duration: 15 } },
 };
 // targets that came after scenes: a run without one has no legacy scene
-const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright', 'getup', 'stand', 'knock'];
+const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright', 'getup', 'stand', 'knock', 'ski'];
 
 // Scene parameters, adjustable per run (the UI's Scene section). A run's
 // scene travels with its jobs, history and champions; a saved creature
@@ -114,6 +117,11 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 //              ground when measuring starts; snakes are all feet); false = scenes from before
 //   speed      speed targets: 'net' = the straight-line distance from start to finish over the time
 //              (rocking and circling net nothing); 'sims' = Sims' max distance and final third
+//   hill       skiing: the slope, degrees (gravity tilts downhill, +X; the view tilts the picture
+//              to match); 0 = skating on flat ice
+//   skiDrag    skiing: air drag, N per (m/s)^2 per m^2 of frontal area: tucking low pays
+//   forward    net speed, animal templates on land: only distance in the direction it faced when
+//              measuring began counts (head first; a quadruped evolved to walk rump-first)
 //   stepWeight walking with falls: weight of the step bonus (the share of 20 steps taken; a step is a
 //              foot off the ground 0.15 s landing 5 cm from where it lifted)
 //   standWeight walking with falls: weight of the standing bonus (half the share of the time up,
@@ -156,19 +164,19 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 2.0, drag: 3, lightDist: 6, buoyancy: 1.5, start: 'side',
   strength: 1, toneMin: 0, levelMin: 0, braceMin: 0, toneRate: 8, reflexRate: 6, jointDamp: 3, jointRange: 1.6,
-  joints: 'limited', falls: true, standWeight: 0.1, stepWeight: 0.1, knockMass: 2, speed: 'net',
+  joints: 'limited', falls: true, standWeight: 0.1, stepWeight: 0.1, knockMass: 2, speed: 'net', forward: true, hill: 8, skiDrag: 0.3,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
   stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { friction: 1, joints: 'old', falls: false, speed: 'sims', ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0 };
+export const LEGACY_SCENE = { friction: 1, joints: 'old', falls: false, speed: 'sims', forward: false, ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0 };
 // a task's default scene: SCENE with the task's own ball
 export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0, joints: 'old', falls: false, friction: 1, speed: 'sims' };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0, joints: 'old', falls: false, friction: 1, speed: 'sims', forward: false };
   const legacy = NEW_KINDS.includes(TASKS[taskName].kind) ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -192,10 +200,13 @@ const START_POSE = {
   back: { x: 1, y: 0, z: 0, w: 0 },                                  // upside down
   sitting: { x: 0, y: 0, z: Math.sin(Math.PI / 6), w: Math.cos(Math.PI / 6) },   // pitched back 60 degrees, nose up
 };
-const STEP_AIR = 0.15, STEP_LEN = 0.05, STEP_MAX = 20;   // walking with falls: a step is a foot off the ground this long (s), landing this far (m) from where it lifted
+const STEP_AIR = 0.15, STEP_LEN = 0.02, STEP_MAX = 20;   // walking with falls: a step is a foot off the ground this long (s), landing this much (m) further along its way than it lifted
 const FALL_TILT = Math.PI / 3, FALL_LOW = 0.6, FALL_BACK = 2, FALL_GRACE = 2;   // walking with falls: see Sim.step (2 s: a slow topple can lean for over a second before it passes FALL_TILT)
 // knocked down: the pendulum (a ball on a rigid rope from a fixed pivot)
 const KNOCK = { delay: 1, len: 2.5, angle: 75 * Math.PI / 180, r: 0.25 };
+// skiing: the planks under the feet (half extents: length, thickness, width), and which template parts get them
+const SKI = { half: [0.3, 0.01, 0.045], grip: 1.0 };
+const SKI_ROLES = ['foot', 'paw', 'lowerLeg', 'frontLower', 'clawLower'];
 const BUOY_BAND = 0.05;   // surface water: buoyancy on a sample point fades in over this depth (m)
 // share of a sample point's buoyancy at height y (0 above the band, 1 below),
 // and its potential: dP/dy = -wet(y), so buoyancy is conservative
@@ -341,7 +352,7 @@ export class Creature {
         maxY = Math.max(maxY, dot(p.center, u) + support(p, p.R, u));
       }
       // floating: as deep as a box of uniform density would (1 / buoyancy of its height)
-      pos[1] = opts.float ? -minY - (maxY - minY) / opts.float : -minY + 0.02;
+      pos[1] = opts.float ? -minY - (maxY - minY) / opts.float : -minY + 0.02 + (opts.skis ? 2 * SKI.half[1] : 0);
     }
     this.q0 = q0; this.pos0 = pos;
 
@@ -457,8 +468,32 @@ export class Creature {
     this.groundHandle = opts.groundHandle ?? -1;
     this.bt = new Array(this.nb); this.bq = new Array(this.nb);
     this.bv = new Array(this.nb); this.bw = new Array(this.nb); this.bc = new Array(this.nb);
+    if (opts.skis) this.makeSkis(world, opts);
     this.read();
     this.makeEyes();
+  }
+
+  // Skis: a thin plank under each foot (a template's feet, paws, lower legs
+  // and claws; otherwise the parts on the ground as built), pointing the
+  // creature's way (X), fixed to the foot's body. Snow is slippery (the
+  // scene's friction), but a ski grips sideways on its edge (Sim.skiEdges),
+  // so a skier can steer, and on the flat skate by pushing off an edge.
+  makeSkis(world, opts) {
+    const roles = TEMPLATES[this.genome.plan?.type]?.roles;
+    const foot = k => (roles ? SKI_ROLES.includes(this.genome.nodes[this.parts[k].node].role) : this.feet.has(k));
+    this.skis = [];
+    this.parts.forEach((p, k) => {
+      if (!foot(k)) return;
+      const b = this.partBody[k], down = support(p, p.R, [0, 1, 0]);
+      const at = [this.partC[k][0], this.partC[k][1] - down - SKI.half[1], this.partC[k][2]];
+      const col = world.createCollider(RAPIER.ColliderDesc.cuboid(...SKI.half).setTranslation(...at)
+        .setDensity(1).setFriction(opts.friction ?? PHYS.friction).setRestitution(0), this.bodies[b]);
+      this.colliderPart.set(col.handle, k);   // its contacts count as the foot's
+      this.skis.push({ body: b, at, col, part: k });
+    });
+    // the skis' mass joins the bodies'
+    this.mass = this.bodies.map(b => b.mass());
+    this.totalMass = this.mass.reduce((a, b) => a + b, 0);
   }
 
   // Two eyes on the head (the template's head part, else the root). Spread
@@ -580,6 +615,16 @@ export class Creature {
     return scale(c, 1 / this.totalMass);
   }
 
+  // the creature's widths across direction u (unit): sideways (horizontal)
+  // and the other way (mostly up), its frontal box seen along u
+  extentAcross(u) {
+    let e1 = cross([0, 1, 0], u); const n = len(e1);
+    e1 = n > 1e-6 ? scale(e1, 1 / n) : [0, 0, 1];
+    const e2 = cross(u, e1);
+    const width = w => -this.minAlong(scale(w, -1)) - this.minAlong(w);
+    return [width(e1), width(e2)];
+  }
+
   // min over the creature's points of dot(point, w), w any direction
   minAlong(w) {
     const n = len(w), u = scale(w, 1 / n);
@@ -671,12 +716,14 @@ export class Creature {
 
   // Full mechanical energy: translation, rotation (world inertia from
   // Rapier), gravity and the energy held in joint-limit springs.
-  fullEnergy(g) {
+  // gx: gravity's downhill (+X) component (skiing), whose potential falls along X
+  fullEnergy(g, gx = 0) {
     let e = 0;
     for (let i = 0; i < this.nb; i++) {
       const v = this.bv[i], w = this.bw[i];
       const M = this.bodies[i].effectiveAngularInertia();
       e += this.mass[i] * (0.5 * (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) + g * this.bc[i][1]);
+      if (gx) e -= this.mass[i] * gx * this.bc[i][0];
       e += 0.5 * (w[0] * (M.m11 * w[0] + M.m12 * w[1] + M.m13 * w[2]) + w[1] * (M.m12 * w[0] + M.m22 * w[1] + M.m23 * w[2]) + w[2] * (M.m13 * w[0] + M.m23 * w[1] + M.m33 * w[2]));
     }
     return e;
@@ -745,6 +792,13 @@ export class Creature {
           const s = Math.sign(n[k]) * (k === 2 ? p.d : 1);
           S[i * NSENS + 3 + 2 * k + (s > 0 ? 0 : 1)] = 1;
         });
+      });
+    }
+    // skis: a ski on the snow is its foot on the ground, felt on the foot's underside (-Y face)
+    for (const ski of this.skis || []) {
+      world.contactPairsWith(ski.col, other => {
+        if (other.handle !== this.groundHandle) return;
+        world.contactPair(ski.col, other, m => { if (m.numContacts() > 0) { this.onGround[ski.part] = true; S[ski.part * NSENS + 6] = 1; } });
       });
     }
     // photosensors: normalized direction of the target in each block's frame
@@ -1038,7 +1092,11 @@ export class Sim {
     // reflexes on, as biped and quadruped walking always did: an insect
     // relaxed with its muscles off lies on its belly before it starts.
     this.relaxing = land && sc.settle === 'stable' && !(sc.falls && genomes.every(g => TEMPLATES[g.plan?.type]));
-    const world = this.world = new RAPIER.World({ x: 0, y: -this.g, z: 0 });
+    // skiing: gravity tilts downhill (+X) by the hill angle, on flat ground
+    this.hill = task.kind === 'ski' ? (sc.hill || 0) * Math.PI / 180 : 0;
+    this.gx = this.g * Math.sin(this.hill);
+    if (this.hill) this.g *= Math.cos(this.hill);
+    const world = this.world = new RAPIER.World({ x: this.gx, y: -this.g, z: 0 });
     world.timestep = DT;
     // extra solver iterations: with 4, contacts on small, light round parts
     // put measurable energy into the system (1 J/kg); 12 brings it to noise
@@ -1096,7 +1154,7 @@ export class Sim {
         this.creatures.forEach((c, i) => { if (c.valid) c.shift([0, 0, this.apart[i]]); });
       }
     } else {
-      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land, float: this.surface ? sc.buoyancy : 0,
+      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land, float: this.surface ? sc.buoyancy : 0, skis: task.kind === 'ski',
         tilt: task.kind === 'getup' ? START_POSE[sc.start] || START_POSE.side : null }));
       if (task.kind === 'climb') this.buildStairs();
       // lifting: the cube appears when measuring starts (addBall), so the
@@ -1115,7 +1173,7 @@ export class Sim {
     this.mass = this.creatures.reduce((s, c) => s + (c.valid ? c.totalMass : 0), 0) + (this.cube ? this.cube.mass() : 0);
     this.track = this.creatures.map(() => ({ start: null, mark: null, maxDist: 0, maxLow: 0, d0: 0 }));
     // walking with falls: a part other than the feet touching the ground ends the walk
-    this.walkFalls = !!sc.falls && land && (task.kind === 'speed' || task.kind === 'upright' || task.kind === 'stand');
+    this.walkFalls = !!sc.falls && land && (task.kind === 'speed' || task.kind === 'upright' || task.kind === 'stand' || task.kind === 'ski');
     // ... and the sim runs FALL_GRACE s past the measured time: nothing then
     // counts, but a fall does (a topple begun just before the end rolls back)
     this.grace = this.walkFalls ? Math.round(FALL_GRACE / DT) : 0;
@@ -1235,7 +1293,8 @@ export class Sim {
 
   // walking with falls: steps. A foot (a foot part's body: a paw and its
   // toes are one) that leaves the ground for STEP_AIR s and lands STEP_LEN
-  // from where it lifted has taken a step, and the score so far is kept as
+  // further along its way than where it lifted has taken a step, and the
+  // score so far is kept as
   // the last catch. Walking is falling forward and catching yourself: a
   // beginner that steps, steps and falls keeps what its steps won.
   trackSteps(c, tr) {
@@ -1246,7 +1305,13 @@ export class Sim {
       let down = false;
       for (let k = 0; k < c.parts.length && !down; k++) if (c.partBody[k] === b && c.onGround[k]) down = true;
       if (!down) { if (f.off === 0) f.from = [pos[0], pos[2]]; f.off += DT; return; }
-      if (f.off >= STEP_AIR && f.from && Math.hypot(pos[0] - f.from[0], pos[2] - f.from[1]) >= STEP_LEN) {
+      // it must go somewhere: land STEP_LEN further along the creature's way
+      // (its facing, for animals) or further from the start, than it lifted.
+      // Counting any 5 cm step, creatures marched in place for the bonus.
+      const d = [pos[0] - f.from?.[0], 0, pos[2] - f.from?.[1]];
+      const ahead = !f.from ? 0 : tr.fwd ? dot(d, tr.fwd)
+        : tr.start ? Math.hypot(pos[0] - tr.start[0], pos[2] - tr.start[2]) - Math.hypot(f.from[0] - tr.start[0], f.from[1] - tr.start[2]) : 0;
+      if (f.off >= STEP_AIR && ahead >= STEP_LEN) {
         tr.nSteps = (tr.nSteps || 0) + 1;
         tr.caught = this.snap(tr);
       }
@@ -1261,8 +1326,23 @@ export class Sim {
   // the start, half the final third's distance, which rewarded a lean out
   // and back, or a rock caught at the right moment.
   travel(tr, drop, dropLate, T) {
-    if (this.scene.speed === 'net') return tr.last ? Math.max(0, len(sub(tr.last, tr.start)) - drop) / T : 0;
+    if (this.scene.speed === 'net') {
+      if (!tr.last) return 0;
+      const d = sub(tr.last, tr.start);
+      // head first: only the way it faced when measuring began counts
+      return Math.max(0, (tr.fwd ? dot(d, tr.fwd) : len(d)) - drop) / T;
+    }
     return Math.max(0, 0.5 * (tr.maxDist - drop) / T + 0.5 * (tr.mark ? Math.max(0, len(sub(tr.last, tr.mark)) - dropLate) : 0) / (T / 3));
+  }
+
+  // Head first (scene forward, animal templates on land): the horizontal
+  // direction the creature faces, its root's built forward (X) as it is now.
+  // An evolved quadruped walked rump-first. Other bodies have no front.
+  facing(c) {
+    if (!this.scene.forward || !TEMPLATES[c.genome.plan?.type] || this.task.env !== 'land') return null;
+    const f = qrot(c.partPose(0).q, qrot(qconj(c.partQ[0]), [1, 0, 0]));
+    const h = Math.hypot(f[0], f[2]);
+    return h > 1e-6 ? [f[0] / h, 0, f[2] / h] : null;
   }
 
   // walking with falls: the step bonus, stepWeight x the share of STEP_MAX steps taken
@@ -1308,6 +1388,36 @@ export class Sim {
     this.pend = null;
   }
 
+  // Skiing: each ski on the snow grips sideways. Its sideways velocity is
+  // taken out by an impulse at the ski, up to SKI.grip x the weight the
+  // touching skis share (Coulomb on the edge), so it only ever removes
+  // energy. And air drag on the body, against its velocity: skiDrag x
+  // frontal area (the bounding box seen along the motion) x v^2, so tucking
+  // low and narrow is faster.
+  skiEdges(c) {
+    const on = c.skis.filter(s => { const b = c.bodies[s.body], q = b.rotation(), t = b.translation(), p = add([t.x, t.y, t.z], qrot(q, s.at)); return p[1] < 2 * SKI.half[1] + 0.01; });
+    const cap = on.length ? SKI.grip * c.totalMass * this.g * DT / on.length : 0;
+    for (const s of on) {
+      const b = c.bodies[s.body], q = b.rotation(), t = b.translation();
+      const p = add([t.x, t.y, t.z], qrot(q, s.at)), a = qrot(q, [1, 0, 0]);
+      const h = Math.hypot(a[0], a[2]); if (h < 1e-6) continue;
+      const side = [-a[2] / h, 0, a[0] / h];
+      const v = add(c.bv[s.body], cross(c.bw[s.body], sub(p, c.bc[s.body])));
+      const vs = dot(v, side), J = Math.max(-cap, Math.min(cap, -vs * c.mass[s.body]));
+      b.applyImpulseAtPoint(V(scale(side, J)), V(p), true);
+    }
+    const k = this.scene.skiDrag ?? 0.3;
+    if (k > 0) {
+      let P = [0, 0, 0]; for (let i = 0; i < c.nb; i++) P = add(P, scale(c.bv[i], c.mass[i]));
+      const v = scale(P, 1 / c.totalMass), sp = len(v);
+      if (sp > 1e-6) {
+        const u = scale(v, 1 / sp), [lo, hi] = c.extentAcross(u);
+        const F = k * lo * hi * sp * sp, imp = Math.min(F * DT, sp * c.totalMass);
+        for (let i = 0; i < c.nb; i++) c.bodies[i].applyImpulse(V(scale(u, -imp * c.mass[i] / c.totalMass)), true);
+      }
+    }
+  }
+
   // what an eye sees as salient: the prize (ball, cube or barbell) or another creature's body
   salient(h, i) {
     if (this.cube && this.cube.handle === h) return true;
@@ -1345,6 +1455,7 @@ export class Sim {
       }
       // reflexes hold posture from the start, except while relaxing as Sims did
       c.actuate(active, this.tStart !== null || !this.relaxing);
+      if (c.skis) this.skiEdges(c);
       if (task.env === 'water') c.drag();
       else if (this.surface) { c.drag(true); c.buoy(this.scene.buoyancy, this.g); }
       else c.roll(this.g);
@@ -1505,7 +1616,7 @@ export class Sim {
 
   energy() {
     let e = 0;
-    this.creatures.forEach(c => { if (c.valid) e += c.fullEnergy(this.g) + (this.surface ? c.buoyEnergy(this.scene.buoyancy, this.g) : 0); });
+    this.creatures.forEach(c => { if (c.valid) e += c.fullEnergy(this.g, this.gx) + (this.surface ? c.buoyEnergy(this.scene.buoyancy, this.g) : 0); });
     if (this.pend) e += this.pendEnergy();
     if (this.cube) {
       const v = this.cube.linvel(), w = this.cube.angvel(), m = this.cube.mass();
@@ -1543,9 +1654,14 @@ export class Sim {
       let p = c.com();
       if (task.env !== 'water') p = [p[0], 0, p[2]];   // on land and at the surface, horizontal
       if (tr.slideOff) p = sub(p, tr.slideOff);   // less any sliding
-      if (!tr.start) tr.start = p;
+      if (!tr.start) { tr.start = p; tr.fwd = this.facing(c); }
       tr.maxDist = Math.max(tr.maxDist, len(sub(p, tr.start)));
       if (!tr.mark && elapsed >= this.T * 2 / 3) { tr.mark = p; tr.yMark = tr.minYMark = y; }
+      tr.last = p;
+      if (this.walkFalls) this.keepPast(tr);
+    } else if (task.kind === 'ski') {
+      const p = [c.com()[0], 0, c.com()[2]];
+      if (!tr.start) tr.start = p;
       tr.last = p;
       if (this.walkFalls) this.keepPast(tr);
     } else if (task.kind === 'stand') {
@@ -1578,7 +1694,7 @@ export class Sim {
       if (tr.fell === undefined) {
         let p = [c.com()[0], 0, c.com()[2]];
         if (tr.slideOff) p = sub(p, tr.slideOff);   // less any sliding
-        if (!tr.start) tr.start = p;
+        if (!tr.start) { tr.start = p; tr.fwd = this.facing(c); }
         tr.maxDist = Math.max(tr.maxDist, len(sub(p, tr.start)));
         if (!tr.mark && elapsed >= this.T * 2 / 3) { tr.mark = p; if (this.walkFalls) tr.yMark = tr.minYMark = y; }
         tr.last = p;
@@ -1737,6 +1853,15 @@ export class Sim {
         return this.travel(tr, 0, 0, T) + 0.1 * up;
       }
       if (task.kind === 'jump') return Math.max(0, tr.maxLow);
+      // skiing: downhill (+X) as far as it got before any fall, over the
+      // time; on the flat, as far in any direction; plus the standing bonus
+      if (task.kind === 'ski') {
+        const up = tr.fell === undefined ? 1 : Math.min(1, Math.max(0, tr.fell - this.tStart) / T);
+        const stand = 0.5 * up + 0.5 * Math.max(0, Math.min(1, tr.h0 || 0));
+        if (!tr.start || !tr.last) return (this.scene.standWeight ?? 0.1) * stand;
+        const d = sub(tr.last, tr.start), dist = this.hill ? d[0] : len(d);
+        return Math.max(0, dist) / T + (this.scene.standWeight ?? 0.1) * stand;
+      }
       // standing: half the share of the time it stayed up, half its average
       // height over the whole time (nothing after a fall)
       if (task.kind === 'stand') {

@@ -20,6 +20,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Biped walking (beyond Sims) | land, the biped template | as walking, up to the first time any part but a foot or the tail touches the ground, + 0.1 × the share of the time it stayed up |
 | Quadruped walking (beyond Sims) | land, the quadruped template | as biped walking, falls being anything but the paws, toes or tail touching the ground |
 | Knocked down (beyond Sims) | land; one second in, a pendulum ball (2 × the creature's mass, 2.5 m rope, from 75°) swings in from a random direction and is taken away after one pass; two opposite directions per test, re-drawn each generation | standing, as in getting up, from the strike on: ¾ the last third's average, ¼ the whole time's |
+| Skiing (beyond Sims) | land on skis: a plank under every foot, slippery snow (friction 0.08) with edges that grip sideways, down an 8° hill (Scene: *Hill*; 0 = skating on ice) | metres downhill (on the flat, in any direction) per second until any fall, plus the standing bonus |
 | Standing (beyond Sims) | land; walking's fall rules | half the share of the time it stays up, half its average height (a share of its built pose's) over the whole time |
 | Getting up (beyond Sims) | land; the creature starts lying on its side, on its back or sitting (Scene: *Start*) | how well it stands, 0–1: uprightness (on its back 0, on its side 0.5, as built 1) × centre-of-mass height as a share of the built pose's, halved while any part but its feet touches the ground (a template's feet, paws, toes and tail; otherwise the parts on the ground as built); ¾ the last third's average, ¼ the whole run's |
 | Lifting (beyond Sims) | land, a barbell (a 1.2 m bar between two square 0.4 m plates, 0.3 kg; the bar 0.2 m off the ground) beside the creature | the barbell's height off the ground averaged over the last second, + up to 0.2 for closing on it |
@@ -475,15 +476,41 @@ from the start and half the final third's distance, paid for a lean out and
 back, or a rock caught at the right moment; saved runs keep it. Champions
 that travel lose little: the swimmer keeps 91% of its score, the insect 95%.
 
+**Head first** (Scene, new runs): animals (templates) on land score only for
+distance in the direction they faced when measuring began, so walking
+rump-first or sideways earns nothing. The first quadruped to walk (run
+quadruped-9304, 3.2 m in 10 s) went rump-first, dragging its front feet; it
+moved 2.45 m backwards along its facing, and under this rule its score falls
+from 0.45 to 0.20 (standing and steps). Free, bilateral and radial bodies
+have no front and may go any way.
+
+**Skiing** (target): sliding is good here, so the sliding rule is off. Every
+foot (a template's feet, paws, lower legs and claws; otherwise the parts on
+the ground as built) gets a ski, a 60 cm plank pointing the creature's way,
+fixed to the foot. The snow is slippery, but a ski on the snow grips
+sideways on its edge: its sideways velocity is taken out, up to the weight
+the touching skis share (Coulomb on the edge, so it only removes energy).
+That lets a skier steer, and on the flat skate by pushing off an edge. The
+hill is gravity tilted downhill on flat ground, so placement, falls and
+reflexes work unchanged, and the view tilts the picture to make the ground a
+slope. Everything that stays up accelerates alike, so air drag (*Air drag*,
+on frontal area) makes tucking low and narrow pay. A ski on the snow is felt
+on its foot's underside. Random creatures slid 4–9 m in 10 s, with no energy
+gain.
+
 **Walking is falling forward and catching yourself.** A beginner takes a
 step or two and falls, and rolling the score back 2 s erased exactly those
 first steps, so there was nothing to climb toward but standing still or
 sliding. Now a step counts: a foot (a paw and its toes are one) that leaves
-the ground for 0.15 s and lands 5 cm from where it lifted. On a fall, the
+the ground for 0.15 s and lands at least 2 cm further along the creature's
+way than where it lifted (forward along its facing, for animals; further
+from the start, for other bodies). Counting any 5 cm step at first,
+creatures marched in place for the bonus; a marching biped that took 27
+"steps" now takes none and scores only for standing. On a fall, the
 score keeps its progress up to the last step, unless that came more than 2 s
 before the fall; a pure topple still earns nothing. Steps also earn a bonus
 of their own (Scene: *Step bonus*, 0.1 × the share of 20 steps taken);
-stepping in place counts, as a gait's first draft.
+stepping in place no longer counts.
 
 **The brain drives through the motors.** Reflexes hold a pose with the
 muscle's full strength on Rapier's motors, but the brain's torques were

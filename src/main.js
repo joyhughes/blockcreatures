@@ -6,7 +6,7 @@ import { makeRng } from './math.js';
 import { Recorder } from './record.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1', ski: 'm/s downhill' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -53,7 +53,7 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', buoyancy: 'scBuoyancy', start: 'scStart',
   strength: 'scStrength', toneMin: 'scToneMin', levelMin: 'scLevelMin', braceMin: 'scBraceMin',
-  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
+  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', hill: 'scHill', skiDrag: 'scSkiDrag', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
   grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether',
   stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing', engage: 'scEngage', bothSides: 'scBothSides' };
