@@ -22,6 +22,15 @@ export const PHYS = {
   strength: 12,      // max effector torque per (cross-section area)^1.5
   servoFreq: 12,     // servo joints: natural frequency (rad/s) of the drive toward the target angle
   servoDamp: 0.7,    //   and its damping ratio
+  // reflexes run on Rapier's joint motors, which are implicit: a motor drives
+  // the joint toward a target turning rate with whatever torque that takes,
+  // up to the muscle's strength, and stays stable however light the parts
+  toneRate: 8,       // tone: target turning rate back toward the built angle, per rad off it (1/s)
+  reflexRate: 6,     // level and brace: target turning rate toward the built orientation, per rad off it (1/s)
+  reflexGain: 5,    // how hard a motor holds its target rate: full force at 1/this rad/s off it
+                     // (force-based motors; Rapier's acceleration-based ones didn't hold a load;
+                     // at 20 the motors were near-rigid and the solver gained energy at impacts)
+  reflexMaxRate: 8,  // target rates are capped at this (rad/s)
   alphaMax: 150,     // effector torque capped at this angular accel (numerical guard)
   jointDamp: 3,      // joint damping, per unit effective inertia
   solverIterations: 12,
@@ -68,11 +77,13 @@ export const TASKS = {
   quadruped: { label: 'Quadruped walking', env: 'land', duration: 10, settle: 1, trials: 1, kind: 'upright', plan: 'quadruped',
     scene: { settle: 'timed' } },
   // a light cube on the ground beside it: lift it as high as it can hold it
+  // stand up from lying or sitting (scene `start`), and stay up
+  getUp: { label: 'Getting up', env: 'land', duration: 10, settle: 0.5, trials: 1, kind: 'getup', scene: { settle: 'timed' } },
   lift: { label: 'Lifting', env: 'land', duration: 15, settle: 1, trials: 1, kind: 'lift',
     scene: { ball: 'barbell', ballSize: 0.2, ballMass: 0.3, duration: 15 } },
 };
 // targets that came after scenes: a run without one has no legacy scene
-const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright'];
+const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright', 'getup'];
 
 // Scene parameters, adjustable per run (the UI's Scene section). A run's
 // scene travels with its jobs, history and champions; a saved creature
@@ -80,6 +91,8 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright']
 //   duration   seconds measured after settling (null = the task's own)
 //   gravity    m/s^2 on land          friction   ground and body friction
 //   drag       water viscosity        lightDist  light's distance (following)
+//   start      getting up: the pose it starts in, 'side' (rolled onto its side), 'back' (upside
+//              down) or 'sitting' (pitched back 60 degrees, rump down)
 //   buoyancy   surface swimming: water's density relative to the creatures' (1.5 floats a
 //              creature about two thirds under)
 //   ball       'sphere' | 'cube' | 'barbell' (lifting: a bar between two plates, the bar
@@ -112,7 +125,7 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright']
 //   together   cooperation: the share of the score (0..1) given for the share of the measured time
 //              both creatures touch the ball at once
 export const SCENE = {
-  duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6, buoyancy: 1.5,
+  duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6, buoyancy: 1.5, start: 'side',
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
   stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
@@ -136,6 +149,16 @@ const BALL_ROLL = 0.02;
 const APART = 50;   // settling apart: each creature this far to the side (m)
 const WRESTLE_SCALE = 1;   // wrestling: this much further (m) outside the ring than the other is a full loss
 const WRESTLE_CENTRE = 0.5;   // wrestling: weight of holding the middle (mean distance from it, in ring radii)
+// Rapier axis numbers (3-5 = rotation about the joint frame's X, Y, Z) left
+// free by each joint type, as created in Creature
+const AXES = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+const MOTOR_AXES = { spherical: [3, 4, 5], revolute: [3], twist: [3], universal: [4, 5], bendtwist: [4, 5], twistbend: [4, 5] };
+// getting up: start poses, turned from the built (standing) pose; X is forward, Z to the side
+const START_POSE = {
+  side: { x: Math.SQRT1_2, y: 0, z: 0, w: Math.SQRT1_2 },           // rolled 90 degrees onto its side
+  back: { x: 1, y: 0, z: 0, w: 0 },                                  // upside down
+  sitting: { x: 0, y: 0, z: Math.sin(Math.PI / 6), w: Math.cos(Math.PI / 6) },   // pitched back 60 degrees, nose up
+};
 const BUOY_BAND = 0.05;   // surface water: buoyancy on a sample point fades in over this depth (m)
 // share of a sample point's buoyancy at height y (0 above the band, 1 below),
 // and its potential: dP/dy = -wet(y), so buoyancy is conservative
@@ -229,6 +252,7 @@ export class Creature {
   constructor(world, genome, opts = {}) {
     let { parts } = develop(genome);
     this.genome = genome;
+    this.world = world;
     this.valid = parts.length > 0 && !tooBig(parts) && !interpenetrates(parts);
     this.parts = parts;
     if (!this.valid) return;
@@ -245,7 +269,8 @@ export class Creature {
     initBrain(this.brain);
     this.sens = this.brain.vals;  // sensors live at the start of the brain's value array
 
-    const q0 = yawQuat(opts.yaw || 0);
+    // opts.tilt: a start pose turned from the built one (getting up)
+    const q0 = opts.tilt ? qmul(yawQuat(opts.yaw || 0), opts.tilt) : yawQuat(opts.yaw || 0);
     const pos = (opts.pos || [0, 0, 0]).slice();
     // competition: start with the creature's near side `clear` from the origin,
     // plus its own longest dimension if `clearBody`
@@ -254,11 +279,22 @@ export class Creature {
       const len = opts.clearBody ? Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) : 0;
       pos[0] = opts.side * (opts.clear + len + hi[0]);
     }
+    // the built pose standing on the ground: its centre of mass's height
+    {
+      let minY = Infinity, m = 0, cy = 0;
+      for (const p of parts) { minY = Math.min(minY, p.center[1] - support(p, p.R, [0, 1, 0])); const pm = massProps(p).m; m += pm; cy += pm * p.center[1]; }
+      this.standY = cy / m - minY;
+      // its feet: the parts within 3 cm of the ground as built (for plans
+      // without a template's ground parts)
+      this.feet = new Set(parts.map((p, k) => (p.center[1] - support(p, p.R, [0, 1, 0]) <= minY + 0.03 ? k : -1)).filter(k => k >= 0));
+    }
     if (opts.ground || opts.float) {
+      // which way is up in the creature's frame, in its start pose
+      const u = opts.tilt ? qrot(qconj(q0), [0, 1, 0]) : [0, 1, 0];
       let minY = Infinity, maxY = -Infinity;
       for (const p of parts) {
-        minY = Math.min(minY, p.center[1] - support(p, p.R, [0, 1, 0]));
-        maxY = Math.max(maxY, p.center[1] + support(p, p.R, [0, 1, 0]));
+        minY = Math.min(minY, dot(p.center, u) - support(p, p.R, u));
+        maxY = Math.max(maxY, dot(p.center, u) + support(p, p.R, u));
       }
       // floating: as deep as a box of uniform density would (1 / buoyancy of its height)
       pos[1] = opts.float ? -minY - (maxY - minY) / opts.float : -minY + 0.02;
@@ -330,15 +366,23 @@ export class Creature {
       // in series. That is a lower bound on the true response (the joint can
       // only add inertia), so explicit spring/damping gains scaled by it
       // stay stable.
+      const iP = [], iC = [];
       const iEff = [0, 1, 2].map(k => {
         const ip = this.inertiaAbout(pb, this.bodyCom(pb), F[k]), ic = this.inertiaAbout(cb, this.bodyCom(cb), F[k]);
+        iP.push(ip); iC.push(ic);
         return ip * ic / (ip + ic);
       });
+      // reflexes: gains, and which way is up in each part's own frame as built
+      const rf = genome.nodes[p.node].reflex || [0, 0, 0];
+      const upOf = k => qrot(qconj(this.partQ[k]), [0, 1, 0]);
       const strength = PHYS.strength * Math.min(partArea(p.half), partArea(par.half)) ** 1.5;
       const lim = genome.nodes[p.node].limits;
       this.joints.push({
         part: i, pb, cb, F, qF: quatFromMat(F), sigma, dofs, iEff, strength, limits: lim,
         servo: !!this.genome.nodes[p.node].servo,
+        reflex: rf, anyReflex: rf.some(x => x > 0), iP, iC, pp: p.parent, upC: upOf(i), upP: upOf(p.parent),
+        // Rapier's motor axes: the free angular axes of the joint's frame on the parent
+        handle: joint.handle, f1: joint.frameX1(), raxes: MOTOR_AXES[p.joint], mTarget: [0, 0, 0], mRate: [0, 0, 0], mMax: 0, motors: false,
         eff: dofs.map(a => effIndex.get(i * 3 + a)),
         angle: [0, 0, 0], rate: [0, 0, 0], axis: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
         mt: [0, 0, 0], mr: [0, 0, 0],
@@ -474,6 +518,17 @@ export class Creature {
         this.work += Math.max(0, j.mt[k] * (j.mr[k] + r1) / 2) * DT;
         j.mt[k] = 0;
       }
+      // reflex motors: Rapier doesn't report the torque a motor applied, so
+      // each is credited its most (full force times the turning rate) while
+      // the joint turns the way the motor drives it, and nothing otherwise. The
+      // audit can only be lenient here, never fail an honest reflex.
+      if (j.motors) {
+        const fq = qmul(this.bq[j.pb], j.f1), wrel = sub(this.bw[j.cb], this.bw[j.pb]);
+        j.raxes.forEach((r, n) => {
+          const rate = (j.mRate[n] + dot(wrel, qrot(fq, AXES[r - 3]))) / 2;
+          if (rate * j.mTarget[n] > 0) this.work += j.mMax * Math.abs(rate) * DT;
+        });
+      }
     }
   }
 
@@ -525,6 +580,14 @@ export class Creature {
     }
     // symmetry position: which side / which arm this part belongs to
     for (let i = 0; i < this.parts.length; i++) { S[i * NSENS + 15] = this.parts[i].phase || 0; S[i * NSENS + 16] = this.parts[i].chain || 0; }
+    // balance: up and spin in each part's frame (z mirrored for mirrored
+    // parts; spin is an axial vector, so its x and y flip instead)
+    for (let i = 0; i < this.parts.length; i++) {
+      const { q } = this.partPose(i), qi = qconj(q), d = this.parts[i].d;
+      const up = qrot(qi, [0, 1, 0]), w = qrot(qi, this.bw[this.partBody[i]]), o = i * NSENS;
+      S[o + 17] = up[0]; S[o + 18] = up[1]; S[o + 19] = d * up[2];
+      S[o + 20] = d * w[0]; S[o + 21] = d * w[1]; S[o + 22] = w[2];
+    }
     // contact sensors, one per block face
     this.onGround.fill(false);
     for (let i = 0; i < this.colliders.length; i++) {
@@ -559,7 +622,60 @@ export class Creature {
     }
   }
 
-  actuate(active) {
+  // Reflexes: each joint's motors get a target turning rate for the child
+  // relative to its parent, blended from the three loops by their gains:
+  //   tone   back toward the built angle (held within the joint's limits)
+  //   level  the child toward its built orientation to gravity, cancelling the
+  //          parent's tumbling, so a head stays level while the body moves
+  //   brace  the parent toward its built orientation, which a planted limb
+  //          turns into righting the body
+  // Orientation errors are rotation vectors e = (built up, now) x (world up);
+  // spin about the vertical is left free. With reflexes off, motors go slack.
+  reflexMotors(on) {
+    const raw = this.world.impulseJoints.raw;
+    for (const j of this.joints) {
+      if (!j.anyReflex) continue;
+      const [tone, level, brace] = j.reflex, gs = tone + level + brace;
+      const max = on ? j.strength * Math.min(1, gs) : 0;
+      if (!on) {
+        if (j.motors) for (const r of j.raxes) raw.jointSetMotorMaxForce(j.handle, r, 0);
+        j.motors = false; j.mMax = 0;
+        continue;
+      }
+      const tumble = w => [w[0], 0, w[2]];
+      const wP = this.bw[j.pb], wC = this.bw[j.cb];
+      let goal = [0, 0, 0];
+      if (tone > 0) {
+        // the joint's rotation from its built angle (or the nearest angle its limits allow)
+        let th = [0, 0, 0];
+        for (const k of j.dofs) {
+          const lo = Math.max(-PHYS.limitMax, j.limits[k][0]), hi = Math.min(PHYS.limitMax, j.limits[k][1]);
+          th = add(th, scale(j.axis[k], j.sigma[k] * (j.angle[k] - Math.max(lo, Math.min(hi, 0)))));
+        }
+        goal = add(goal, scale(th, -tone * PHYS.toneRate));
+      }
+      const e = (part, upLocal) => { const u = qrot(this.partPose(part).q, upLocal); return [-u[2], 0, u[0]]; };   // u x (0, 1, 0)
+      if (level > 0) goal = add(goal, scale(sub(scale(e(j.part, j.upC), PHYS.reflexRate), tumble(wP)), level));
+      if (brace > 0) goal = add(goal, scale(sub(tumble(wC), scale(e(j.pp, j.upP), PHYS.reflexRate)), brace));
+      goal = scale(goal, 1 / gs);
+      const fq = qmul(this.bq[j.pb], j.f1), wrel = sub(wC, wP);
+      j.raxes.forEach((r, n) => {
+        const b = qrot(fq, AXES[r - 3]);
+        const target = Math.max(-PHYS.reflexMaxRate, Math.min(PHYS.reflexMaxRate, dot(goal, b)));
+        if (!j.motors) raw.jointConfigureMotorModel(j.handle, r, 1);   // force-based
+        raw.jointConfigureMotorVelocity(j.handle, r, target, PHYS.reflexGain * j.strength);
+        raw.jointSetMotorMaxForce(j.handle, r, max);
+        j.mTarget[n] = target; j.mRate[n] = dot(wrel, b);
+      });
+      j.motors = true; j.mMax = max;
+    }
+  }
+
+
+
+  // reflexes: whether the reflex loops run (off only while relaxing as Sims did)
+  actuate(active, reflexes = false) {
+    this.reflexMotors(reflexes);
     const out = this.brain.effOut;
     for (const j of this.joints) {
       let tau = [0, 0, 0];
@@ -797,7 +913,8 @@ export class Sim {
         this.creatures.forEach((c, i) => { if (c.valid) c.shift([0, 0, this.apart[i]]); });
       }
     } else {
-      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land, float: this.surface ? sc.buoyancy : 0 }));
+      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land, float: this.surface ? sc.buoyancy : 0,
+        tilt: task.kind === 'getup' ? START_POSE[sc.start] || START_POSE.side : null }));
       if (task.kind === 'climb') this.buildStairs();
       // lifting: the cube appears when measuring starts (addBall), so the
       // creature can't settle onto it; its height over the last LIFT_HOLD s
@@ -939,7 +1056,8 @@ export class Sim {
         brainStep(c.brain, DT / 2);
         brainStep(c.brain, DT / 2);
       }
-      c.actuate(active);
+      // reflexes hold posture from the start, except while relaxing as Sims did
+      c.actuate(active, this.tStart !== null || !this.relaxing);
       if (task.env === 'water') c.drag();
       else if (this.surface) { c.drag(true); c.buoy(this.scene.buoyancy, this.g); }
       else c.roll(this.g);
@@ -1087,6 +1205,19 @@ export class Sim {
       tr.maxDist = Math.max(tr.maxDist, len(sub(p, tr.start)));
       if (!tr.mark && elapsed >= this.T * 2 / 3) { tr.mark = p; tr.yMark = tr.minYMark = y; }
       tr.last = p;
+    } else if (task.kind === 'getup') {
+      // standing: the root's uprightness, (1 + up) / 2 (on its back 0, on its
+      // side 0.5, as built 1, so rolling over already counts) x the centre of
+      // mass's height as a share of the built pose's (no more for jumping),
+      // halved while any part but its feet touches the ground: a template's
+      // ground parts, or else the parts on the ground as built
+      const q = c.partPose(0).q, u = qrot(q, qrot(qconj(c.partQ[0]), [0, 1, 0]));
+      const roles = TEMPLATES[c.genome.plan?.type]?.roles;
+      const foot = k => (roles ? roles[c.genome.nodes[c.parts[k].node].role]?.ground : c.feet.has(k));
+      const down = c.parts.some((p, k) => c.onGround[k] && !foot(k));
+      const s = (1 + u[1]) / 2 * Math.max(0, Math.min(1, y / c.standY)) * (down ? 0.5 : 1);
+      tr.sum = (tr.sum || 0) + s; tr.n = (tr.n || 0) + 1;
+      if (elapsed >= this.T * 2 / 3) { tr.late = (tr.late || 0) + s; tr.nLate = (tr.nLate || 0) + 1; }
     } else if (task.kind === 'upright') {
       if (tr.fell === undefined) {
         const p = [c.com()[0], 0, c.com()[2]];
@@ -1233,6 +1364,8 @@ export class Sim {
         return 0.5 * tr.maxDist / T + 0.5 * (tr.mark ? len(sub(tr.last, tr.mark)) : 0) / (T / 3) + 0.1 * up;
       }
       if (task.kind === 'jump') return Math.max(0, tr.maxLow);
+      // getting up: standing over the last third, plus a quarter for the whole time
+      if (task.kind === 'getup') return tr.nLate ? 0.75 * tr.late / tr.nLate + 0.25 * tr.sum / tr.n : 0;
       // stairs: half the COM's rise, half the lowest point's final height,
       // so standing up tall earns little and every part has to climb
       if (task.kind === 'climb') return tr.last === undefined ? 0 : Math.max(0, 0.5 * (tr.last - tr.y0) + 0.5 * Math.max(0, tr.low));

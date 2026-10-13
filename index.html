@@ -169,6 +169,7 @@
     <label data-env="land" title="Friction between bodies and the ground (and the ball). Low = icy">Friction <input type="number" id="scFriction" min="0" max="3" step="0.1"></label>
     <label data-env="land" title="Before scoring, on land. Sims: relax with no friction and no muscles until the centre of mass stops dropping, so toppling can't carry a body forward. Timed: a fixed settle time with friction (this project's earlier behaviour)">Settle <select id="scSettle"><option value="stable">Sims: relax until still</option><option value="timed">timed, with friction</option></select></label>
     <label data-env="water surface" title="Water viscosity: how hard the water pushes back on a moving part">Viscosity <input type="number" id="scDrag" min="0.2" max="20" step="0.2"></label>
+    <label data-kind="getup" title="Getting up: the pose the creature starts in. Side: rolled onto its side. Back: upside down. Sitting: pitched back 60°, rump down">Start <select id="scStart"><option value="side">lying on its side</option><option value="sitting">sitting</option><option value="back">on its back</option></select></label>
     <label data-env="surface" title="Water's density relative to the creatures'. 1.5: a creature floats about two thirds under; near 1 it barely floats; below 1 it sinks">Buoyancy <input type="number" id="scBuoyancy" min="0.5" max="5" step="0.1"></label>
     <label data-kind="follow" title="How far away the light starts">Light distance <input type="number" id="scLightDist" min="1" max="30" step="0.5"> m</label>
   </div>

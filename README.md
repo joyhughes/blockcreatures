@@ -19,6 +19,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Stairs (beyond Sims) | land, a pit at the bottom of a square stepped amphitheatre (12 steps of 0.15 × 0.4 m) | metres climbed: ½ the centre of mass's rise + ½ the lowest part's final height |
 | Biped walking (beyond Sims) | land, the biped template | as walking, up to the first time any part but a foot or the tail touches the ground, + 0.1 × the share of the time it stayed up |
 | Quadruped walking (beyond Sims) | land, the quadruped template | as biped walking, falls being anything but the paws, toes or tail touching the ground |
+| Getting up (beyond Sims) | land; the creature starts lying on its side, on its back or sitting (Scene: *Start*) | how well it stands, 0–1: uprightness (on its back 0, on its side 0.5, as built 1) × centre-of-mass height as a share of the built pose's, halved while any part but its feet touches the ground (a template's feet, paws, toes and tail; otherwise the parts on the ground as built); ¾ the last third's average, ¼ the whole run's |
 | Lifting (beyond Sims) | land, a barbell (a 1.2 m bar between two square 0.4 m plates, 0.3 kg; the bar 0.2 m off the ground) beside the creature | the barbell's height off the ground averaged over the last second, + up to 0.2 for closing on it |
 
 ### Falling over: Sims' rules
@@ -356,6 +357,54 @@ the scores averaged, which makes a mirror match exactly 1–1. It doubles the
 evaluation time. Replays show the first side, so a replay's final score can
 differ from the averaged fitness. Runs from before the setting score one
 side.
+
+## Reflexes and balance
+
+Random bipeds and quadrupeds used to flop: heads drooped onto the ground and
+most bodies sagged to under half their height within a second. There were
+three reasons. Creatures had no sense of which way was up. Muscles were off
+while settling. And the numerical cap on muscle torque (a joint's lightest-case
+inertia × 150 rad/s²) let a leg use only about a tenth of its strength.
+
+- **Balance sensors** (17–22 on every part): the direction of up in the
+  part's frame (a level part reads 0, 1, 0), and its spin about its own
+  axes. The brain can wire them into its own feedback loops.
+- **Reflexes**: three fixed feedback loops at every joint, each with an
+  evolvable gain from 0 to 1 (`node.reflex = [tone, level, brace]`):
+  *tone* pulls the joint back toward its built angle (within its limits);
+  *level* turns the part toward its built orientation to gravity, cancelling
+  the parent's tumbling, so a head holds its view while the body moves;
+  *brace* rights the part it hangs from, so planted legs hold the trunk up.
+- Reflexes run on **Rapier's joint motors**, not explicit torques. Each joint
+  is given a target turning rate, blended from the three loops by their
+  gains, and the motor applies whatever torque that takes, up to the
+  muscle's strength. Motors are solved implicitly, so they stay stable on
+  very light legs under a heavy body, where explicit torques had to stay
+  under a tenth of a leg's strength. They use Rapier's force-based model,
+  because the acceleration-based one didn't hold a load. They reach full
+  force at 0.2 rad/s off their target rate; at 0.05 rad/s they were nearly
+  rigid, and the solver gained energy at impacts.
+- Reflexes run from the start, settling included, except during Sims'
+  relax-until-still settling, where all muscles are off by design. The brain's
+  own muscle commands are unchanged.
+- **Energy audit**: Rapier doesn't report a motor's torque, so a motor is
+  credited its most (full force × turning rate) while the joint turns the way
+  the motor drives it. That can only make the audit lenient on reflex joints,
+  never fail an honest one. With reflexes, 0–2 in 40 random bipeds and
+  quadrupeds failed the audit, about the same as without (1 in 40).
+
+In tests on 16 random bipeds with the brain silent, 13 had fallen after one
+second without reflexes and 1 with full reflexes, and the bodies kept about
+two-thirds of their height instead of under 40%. Holding a posture isn't
+balancing, though: most random bipeds still topple within 5 s, and many
+random quadrupeds settle pitched onto their head or rump because their legs
+grew to different lengths. Evolution has to find bodies and brains that
+balance. Genomes from before reflexes have none and replay unchanged.
+
+**Getting up** (target): the creature starts lying on its side, on its back
+or sitting, pitched back 60° with its rump down (Scene: *Start*), and has to
+stand and stay standing. Its reflexes already pull toward the standing pose,
+since level and brace aim at the built orientation, not the start pose.
 
 ## Surface swimming
 

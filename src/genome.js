@@ -37,7 +37,16 @@ export const FN_NAMES = Object.keys(NEURON_FNS);
 // segment of a chain runs the same circuit, so without 16 they can only flex
 // in lockstep; an oscillator whose phase input reads it makes a travelling
 // wave, its weight setting the wavelength (1 = half a wave along the chain).
-export const NSENS = 17;
+// 17-19 balance: the direction of up in the part's frame (a level part reads
+// 0, 1, 0), 20-22 its spin about its own axes (rad/s). Mirrored parts read
+// both mirrored, like the photosensors, so twins sense alike.
+export const NSENS = 23;
+// Reflexes: fixed feedback loops at each joint, with evolvable gains 0..1
+// (node.reflex = [tone, level, brace]; absent = all 0, as before reflexes):
+//   tone   stretch reflex: pulls the joint back toward its built angle
+//   level  keeps this part's built orientation to gravity (a head holding its view)
+//   brace  rights the part it hangs from (hips and shoulders holding the trunk up)
+export const REFLEXES = ['tone', 'level', 'brace'];
 
 export const SHAPES = ['box', 'capsule', 'sphere'];
 export const PLANS = ['free', 'bilateral', 'radial', 'snake', 'quadruped', 'insect', 'arachnid', 'crustacean', 'centipede', 'biped'];
@@ -119,6 +128,7 @@ export function randNode(rng, opts) {
     limits: randLimits(rng),
     recur: 1 + rng.int(3),
     servo: rng.chance(0.25),   // effector outputs are target angles, not torques
+    reflex: [rng.range(0, 1), rng.chance(0.5) ? rng.range(0, 1) : 0, rng.chance(0.5) ? rng.range(0, 1) : 0],
     neurons: Array.from({ length: rng.int(3) }, () => randNeuron(rng)),
     effectors: [0, 1, 2].map(() => randInput(rng, 'part')),
     conns: [],
@@ -521,6 +531,9 @@ function mutateNode(rng, nd, rate, opts) {
   }
   if (rng.chance(rate)) { nd.joint = rng.pick(JOINTS); n++; }
   if (rng.chance(rate)) { nd.servo = !nd.servo; n++; }
+  for (let k = 0; k < 3; k++) {
+    if (rng.chance(rate)) { nd.reflex ??= [0, 0, 0]; nd.reflex[k] = clamp(nd.reflex[k] + rng.gauss() * 0.25, 0, 1); n++; }
+  }
   if (rng.chance(rate)) { nd.recur = clamp(nd.recur + (rng.chance(0.5) ? 1 : -1), 1, LIMITS.recurMax); n++; }
   n += mutateNeuronList(rng, nd.neurons, rate, 'part', LIMITS.maxNeurons);
   for (const e of nd.effectors) n += mutateInput(rng, e, rate, 'part');
@@ -546,7 +559,7 @@ function mutateConn(rng, c, rate, nNodes) {
 
 function countSites(g) {
   let n = g.globals.length * 4;
-  for (const nd of g.nodes) n += 10 + nd.neurons.length * 4 + 6 + nd.conns.length * 10;
+  for (const nd of g.nodes) n += 13 + nd.neurons.length * 4 + 6 + nd.conns.length * 10;
   return n;
 }
 
