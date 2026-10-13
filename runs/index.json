@@ -1,5 +1,20 @@
 [
  {
+  "file": "quadruped-9304-quadruped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791868328.1437247,
+  "size": 4103970
+ },
+ {
+  "file": "biped-9303-biped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791867846.6796916,
+  "size": 2569175
+ },
+ {
+  "file": "biped-9301-biped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791866492.202009,
+  "size": 2607940
+ },
+ {
   "file": "getUp-73-quadruped-isl6-nov0.3-st0.25.json",
   "mtime": 1791859360.106861,
   "size": 13166262

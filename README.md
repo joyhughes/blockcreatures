@@ -466,6 +466,37 @@ under these rules it scores 0.12, nearly all for standing.
 default is now 2, grippy like rubber on a rough surface, so bodies can't skid
 around as easily and standing is easier. Runs from before keep 1.
 
+**Speed is net distance** (Scene: *Speed*, new runs; every speed target:
+walking, swimming, surface swimming, biped and quadruped walking). Speed is
+the straight line from start to finish (or to a fall's rollback point) over
+the time, less any drop and sliding. Rocking back and forth or circling nets
+nothing; only going somewhere counts. Sims' formula, half the furthest it got
+from the start and half the final third's distance, paid for a lean out and
+back, or a rock caught at the right moment; saved runs keep it. Champions
+that travel lose little: the swimmer keeps 91% of its score, the insect 95%.
+
+**Walking is falling forward and catching yourself.** A beginner takes a
+step or two and falls, and rolling the score back 2 s erased exactly those
+first steps, so there was nothing to climb toward but standing still or
+sliding. Now a step counts: a foot (a paw and its toes are one) that leaves
+the ground for 0.15 s and lands 5 cm from where it lifted. On a fall, the
+score keeps its progress up to the last step, unless that came more than 2 s
+before the fall; a pure topple still earns nothing. Steps also earn a bonus
+of their own (Scene: *Step bonus*, 0.1 × the share of 20 steps taken);
+stepping in place counts, as a gait's first draft.
+
+**The brain drives through the motors.** Reflexes hold a pose with the
+muscle's full strength on Rapier's motors, but the brain's torques were
+capped at a tenth of it, so the reflexes held the legs still and the brain
+could only wiggle them. The best biped of a 30-generation run never lifted a
+foot: its feet slid 8–13 cm while its body crept 0.29 m, and two-thirds of
+its score was the standing bonus. In new runs, a reflexed joint's command
+moves the reflexes' set point: from the standing pose by up to half the
+joint's range each way, within its limits, and the motor takes the joint
+there at full strength, the command outweighing level and brace. A silent
+brain stands; an oscillating one swings the legs around the standing pose.
+Random quadrupeds and arachnids now take the odd step, where none did.
+
 **Creeping feet** (fixed). Creatures standing still with their brains
 silent slid along: quadrupeds drifted up to 0.45 m in 10 s, with paws in
 constant contact sliding even at friction 5. Two causes. Reflexes aimed at

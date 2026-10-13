@@ -112,6 +112,10 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 //   falls      walking on land: the walk ends, and stops counting, when a part other than the
 //              creature's feet touches the ground (template ground parts; otherwise the parts on the
 //              ground when measuring starts; snakes are all feet); false = scenes from before
+//   speed      speed targets: 'net' = the straight-line distance from start to finish over the time
+//              (rocking and circling net nothing); 'sims' = Sims' max distance and final third
+//   stepWeight walking with falls: weight of the step bonus (the share of 20 steps taken; a step is a
+//              foot off the ground 0.15 s landing 5 cm from where it lifted)
 //   standWeight walking with falls: weight of the standing bonus (half the share of the time up,
 //              half the height it stood at when measuring began). Start high so standing pays,
 //              then lower it as gaits appear
@@ -152,19 +156,19 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 2.0, drag: 3, lightDist: 6, buoyancy: 1.5, start: 'side',
   strength: 1, toneMin: 0, levelMin: 0, braceMin: 0, toneRate: 8, reflexRate: 6, jointDamp: 3, jointRange: 1.6,
-  joints: 'limited', falls: true, standWeight: 0.1, knockMass: 2,
+  joints: 'limited', falls: true, standWeight: 0.1, stepWeight: 0.1, knockMass: 2, speed: 'net',
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
   stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { friction: 1, joints: 'old', falls: false, ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0 };
+export const LEGACY_SCENE = { friction: 1, joints: 'old', falls: false, speed: 'sims', ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0 };
 // a task's default scene: SCENE with the task's own ball
 export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0, joints: 'old', falls: false, friction: 1 };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0, joints: 'old', falls: false, friction: 1, speed: 'sims' };
   const legacy = NEW_KINDS.includes(TASKS[taskName].kind) ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -188,6 +192,7 @@ const START_POSE = {
   back: { x: 1, y: 0, z: 0, w: 0 },                                  // upside down
   sitting: { x: 0, y: 0, z: Math.sin(Math.PI / 6), w: Math.cos(Math.PI / 6) },   // pitched back 60 degrees, nose up
 };
+const STEP_AIR = 0.15, STEP_LEN = 0.05, STEP_MAX = 20;   // walking with falls: a step is a foot off the ground this long (s), landing this far (m) from where it lifted
 const FALL_TILT = Math.PI / 3, FALL_LOW = 0.6, FALL_BACK = 2, FALL_GRACE = 2;   // walking with falls: see Sim.step (2 s: a slow topple can lean for over a second before it passes FALL_TILT)
 // knocked down: the pendulum (a ball on a rigid rope from a fixed pivot)
 const KNOCK = { delay: 1, len: 2.5, angle: 75 * Math.PI / 180, r: 0.25 };
@@ -290,6 +295,8 @@ export class Creature {
     this.ph = { strength: ph.strength ?? 1, floor: [ph.toneMin || 0, ph.levelMin || 0, ph.braceMin || 0],
       toneRate: ph.toneRate ?? PHYS.toneRate, reflexRate: ph.reflexRate ?? PHYS.reflexRate,
       damp: ph.jointDamp ?? PHYS.jointDamp, range: Math.min(PHYS.limitMax, ph.jointRange ?? PHYS.limitMax), joints: ph.joints || 'old' };
+    // the brain drives reflexed joints through their motors (see reflexMotors): new scenes
+    this.brainDrive = this.ph.joints !== 'old';
     this.valid = parts.length > 0 && !tooBig(parts) && !interpenetrates(parts);
     this.parts = parts;
     if (!this.valid) return;
@@ -765,11 +772,21 @@ export class Creature {
   //          turns into righting the body
   // Orientation errors are rotation vectors e = (built up, now) x (world up);
   // spin about the vertical is left free. With reflexes off, motors go slack.
-  reflexMotors(on) {
-    const raw = this.world.impulseJoints.raw;
+  //
+  // The brain drives through the same motors (new scenes; brainDrive): its
+  // output moves the tone set point, from the standing pose by up to half
+  // the joint's range each way (within its limits), and the motor takes the
+  // joint there with the muscle's full strength, its command outweighing level
+  // and brace. Brain torques were capped at a tenth of a muscle's strength,
+  // so the reflexes held the legs still and the brain could only wiggle them:
+  // creatures slid instead of stepping. A silent brain stands; an oscillating
+  // one swings the legs around the standing pose.
+  reflexMotors(on, active = false) {
+    const raw = this.world.impulseJoints.raw, out = this.brain.effOut;
     for (const j of this.joints) {
       if (!j.anyReflex) continue;
-      const [tone, level, brace] = j.reflex, gs = tone + level + brace;
+      const drive = active && this.brainDrive && j.eff.some(e => e !== undefined);
+      const [tone0, level, brace] = j.reflex, tone = drive ? Math.max(1, tone0) : tone0, gs = tone + level + brace;
       const max = on ? j.strength * Math.min(1, gs) : 0;
       if (!on) {
         if (j.motors) for (const r of j.raxes) raw.jointSetMotorMaxForce(j.handle, r, 0);
@@ -782,10 +799,16 @@ export class Creature {
       if (tone > 0) {
         // the joint's rotation from its built angle (or the nearest angle its limits allow)
         let th = [0, 0, 0];
-        for (const k of j.dofs) {
+        j.dofs.forEach((k, n) => {
           const lo = Math.max(-this.ph.range, j.limits[k][0]), hi = Math.min(this.ph.range, j.limits[k][1]);
-          th = add(th, scale(j.axis[k], j.sigma[k] * (j.angle[k] - Math.max(lo, Math.min(hi, j.zero ? j.zero[k] : 0)))));
-        }
+          let set = j.zero ? j.zero[k] : 0;
+          if (drive && j.eff[n] !== undefined) {
+            const cmd = Math.max(-1, Math.min(1, out[j.eff[n]]));
+            set += cmd * (hi - lo) / 2;
+            j.effort[k] = cmd;   // proprioception: the command
+          }
+          th = add(th, scale(j.axis[k], j.sigma[k] * (j.angle[k] - Math.max(lo, Math.min(hi, set)))));
+        });
         goal = add(goal, scale(th, -tone * this.ph.toneRate));
       }
       const e = (part, upLocal) => { const u = qrot(this.partPose(part).q, upLocal); return [-u[2], 0, u[0]]; };   // u x (0, 1, 0)
@@ -823,14 +846,14 @@ export class Creature {
 
   // reflexes: whether the reflex loops run (off only while relaxing as Sims did)
   actuate(active, reflexes = false) {
-    this.reflexMotors(reflexes);
+    this.reflexMotors(reflexes, active);
     const out = this.brain.effOut;
     for (const j of this.joints) {
       let tau = [0, 0, 0];
       j.dofs.forEach((k, n) => {
         const ang = j.angle[k], rate = j.rate[k], I = j.iEff[k];
         let t = 0;
-        if (active && j.eff[n] !== undefined) {
+        if (active && j.eff[n] !== undefined && !(this.brainDrive && reflexes && j.anyReflex)) {
           const tMax = Math.min(j.strength, I * PHYS.alphaMax);
           if (j.servo) {
             // servo: the output (-1..1) is a target angle across the joint's
@@ -1205,9 +1228,45 @@ export class Sim {
   // 0.1 s for the last FALL_BACK s, to roll back to on a fall
   keepPast(tr) {
     if (this.steps % 6) return;
-    (tr.past ??= []).push({ maxDist: tr.maxDist, last: tr.last, mark: tr.mark, minY: tr.minY, yMark: tr.yMark, minYMark: tr.minYMark });
+    (tr.past ??= []).push(this.snap(tr));
     if (tr.past.length > FALL_BACK * 10) tr.past.shift();
   }
+  snap(tr) { return { t: this.t, maxDist: tr.maxDist, last: tr.last, mark: tr.mark, minY: tr.minY, yMark: tr.yMark, minYMark: tr.minYMark }; }
+
+  // walking with falls: steps. A foot (a foot part's body: a paw and its
+  // toes are one) that leaves the ground for STEP_AIR s and lands STEP_LEN
+  // from where it lifted has taken a step, and the score so far is kept as
+  // the last catch. Walking is falling forward and catching yourself: a
+  // beginner that steps, steps and falls keeps what its steps won.
+  trackSteps(c, tr) {
+    tr.footBodies ??= [...new Set(c.parts.map((p, k) => (tr.feet(k) ? c.partBody[k] : -1)).filter(b => b >= 0))];
+    tr.fs ??= tr.footBodies.map(() => ({ off: 0, from: null }));
+    tr.footBodies.forEach((b, n) => {
+      const f = tr.fs[n], pos = c.bc[b];
+      let down = false;
+      for (let k = 0; k < c.parts.length && !down; k++) if (c.partBody[k] === b && c.onGround[k]) down = true;
+      if (!down) { if (f.off === 0) f.from = [pos[0], pos[2]]; f.off += DT; return; }
+      if (f.off >= STEP_AIR && f.from && Math.hypot(pos[0] - f.from[0], pos[2] - f.from[1]) >= STEP_LEN) {
+        tr.nSteps = (tr.nSteps || 0) + 1;
+        tr.caught = this.snap(tr);
+      }
+      f.off = 0;
+    });
+  }
+
+  // Speed from distance. 'net' (new scenes): the straight line from start
+  // to finish (or to the fall's rollback point) over the time, less any drop:
+  // rocking back and forth or circling nets nothing, only going somewhere
+  // counts. 'sims' (scenes from before): Sims' half the furthest it got from
+  // the start, half the final third's distance, which rewarded a lean out
+  // and back, or a rock caught at the right moment.
+  travel(tr, drop, dropLate, T) {
+    if (this.scene.speed === 'net') return tr.last ? Math.max(0, len(sub(tr.last, tr.start)) - drop) / T : 0;
+    return Math.max(0, 0.5 * (tr.maxDist - drop) / T + 0.5 * (tr.mark ? Math.max(0, len(sub(tr.last, tr.mark)) - dropLate) : 0) / (T / 3));
+  }
+
+  // walking with falls: the step bonus, stepWeight x the share of STEP_MAX steps taken
+  stepBonus(tr) { return (this.scene.stepWeight ?? 0.1) * Math.min(1, (tr.nSteps || 0) / STEP_MAX); }
 
   // walking with falls: which parts are feet, as a function of part index
   feetOf(c) {
@@ -1329,6 +1388,7 @@ export class Sim {
         // when a creature swinging a heavy weight slides along, the skid
         // doesn't count. Airborne phases count. Snakes are exempt:
         // slithering is sliding.
+        if (task.kind !== 'stand') this.trackSteps(c, tr);
         if (c.genome.plan?.type !== 'snake') {
           let anchor = null, slow = Infinity;
           for (let k = 0; k < c.parts.length; k++) {
@@ -1341,7 +1401,10 @@ export class Sim {
         }
         if (up < Math.cos(TEMPLATES[c.genome.plan?.type]?.fallTilt ?? FALL_TILT) || low || (c.parts.some((p, k) => c.onGround[k] && !tr.feet(k) && !tr.resting.has(k)))) {
           tr.fell = this.t;
-          if (tr.past?.length) Object.assign(tr, tr.past[0]);
+          // roll back FALL_BACK s, or only to the last step if that came later
+          const back = tr.past?.[0], caught = tr.caught;
+          const to = caught && (!back || caught.t > back.t) ? caught : back;
+          if (to) { const { t, ...state } = to; Object.assign(tr, state); }
         }
       }
       if (this.tStart !== null && this.t >= this.tStart) this.trackStep(i);
@@ -1650,17 +1713,15 @@ export class Sim {
         // start, and so is standing taller before collapsing
         const T0 = this.tStart, up = tr.fell === undefined ? 1 : Math.min(1, Math.max(0, tr.fell - T0) / T);
         const stand = 0.5 * up + 0.5 * Math.max(0, Math.min(1, tr.h0 || 0));
-        if (!tr.start) return (this.scene.standWeight ?? 0.1) * stand;
+        if (!tr.start) return (this.scene.standWeight ?? 0.1) * stand + this.stepBonus(tr);
         const drop = tr.y0 - tr.minY, dropLate = tr.yMark === undefined ? 0 : tr.yMark - tr.minYMark;
-        return Math.max(0, 0.5 * (tr.maxDist - drop) / T + 0.5 * (tr.mark ? Math.max(0, len(sub(tr.last, tr.mark)) - dropLate) : 0) / (T / 3)) + (this.scene.standWeight ?? 0.1) * stand;
+        return this.travel(tr, drop, dropLate, T) + (this.scene.standWeight ?? 0.1) * stand + this.stepBonus(tr);
       }
       if (task.kind === 'speed') {
-        if (!tr.start || !tr.mark) return 0;
-        // Sims: straight movement rewarded via max distance from the start;
-        // continuing movement rewarded by weighting the final phase.
+        if (!tr.start || (!tr.mark && this.scene.speed !== 'net')) return 0;
         const drop = tr.y0 === undefined ? 0 : tr.y0 - tr.minY;
         const dropLate = tr.yMark === undefined ? 0 : tr.yMark - tr.minYMark;
-        return Math.max(0, 0.5 * (tr.maxDist - drop) / T + 0.5 * Math.max(0, len(sub(tr.last, tr.mark)) - dropLate) / (T / 3));
+        return this.travel(tr, drop, dropLate, T);
       }
       if (task.kind === 'upright') {
         // as walking (Sims' max distance plus the final third's distance),
@@ -1671,9 +1732,9 @@ export class Sim {
         if (this.walkFalls) {
           // less the centre of mass's drop up to the fall, so a topple nets about nothing
           const drop = tr.y0 === undefined ? 0 : tr.y0 - tr.minY, dropLate = tr.yMark === undefined ? 0 : tr.yMark - tr.minYMark;
-          return Math.max(0, 0.5 * (tr.maxDist - drop) / T + 0.5 * (tr.mark ? Math.max(0, len(sub(tr.last, tr.mark)) - dropLate) : 0) / (T / 3)) + 0.1 * up;
+          return this.travel(tr, drop, dropLate, T) + 0.1 * up + this.stepBonus(tr);
         }
-        return 0.5 * tr.maxDist / T + 0.5 * (tr.mark ? len(sub(tr.last, tr.mark)) : 0) / (T / 3) + 0.1 * up;
+        return this.travel(tr, 0, 0, T) + 0.1 * up;
       }
       if (task.kind === 'jump') return Math.max(0, tr.maxLow);
       // standing: half the share of the time it stayed up, half its average
