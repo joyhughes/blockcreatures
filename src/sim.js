@@ -34,6 +34,7 @@ export const PHYS = {
   alphaMax: 150,     // effector torque capped at this angular accel (numerical guard)
   jointDamp: 3,      // joint damping, per unit effective inertia
   solverIterations: 12,
+  frictionPasses: 4,  // solver passes per substep, new scenes (see Sim)
   energyTol: 1.0,    // J/kg of unexplained energy gain treated as a simulation error
   limitReturn: 5, limitReturnMax: 1,   // return speed past a limit: 5 rad/s per rad, at most 1 rad/s
   limitMax: 1.6,     // |joint limit| cap, keeps rotation-vector angles away from the pi wrap
@@ -783,7 +784,7 @@ export class Creature {
         let th = [0, 0, 0];
         for (const k of j.dofs) {
           const lo = Math.max(-this.ph.range, j.limits[k][0]), hi = Math.min(this.ph.range, j.limits[k][1]);
-          th = add(th, scale(j.axis[k], j.sigma[k] * (j.angle[k] - Math.max(lo, Math.min(hi, 0)))));
+          th = add(th, scale(j.axis[k], j.sigma[k] * (j.angle[k] - Math.max(lo, Math.min(hi, j.zero ? j.zero[k] : 0)))));
         }
         goal = add(goal, scale(th, -tone * this.ph.toneRate));
       }
@@ -805,6 +806,20 @@ export class Creature {
   }
 
 
+
+  // Reflexes hold the pose the creature stands in once measuring starts
+  // (walking and standing with falls): tone the joint angles it has then, level
+  // and brace its parts' orientations then. Aimed at the built pose instead,
+  // the joints of a body standing on several feet fought each other through
+  // the ground (it can't reach the built pose exactly), and the solver let its
+  // feet creep: silent quadrupeds slid up to 0.45 m.
+  holdPose() {
+    for (const j of this.joints) {
+      j.zero = j.angle.slice();
+      j.upC = qrot(qconj(this.partPose(j.part).q), [0, 1, 0]);
+      j.upP = qrot(qconj(this.partPose(j.pp).q), [0, 1, 0]);
+    }
+  }
 
   // reflexes: whether the reflex loops run (off only while relaxing as Sims did)
   actuate(active, reflexes = false) {
@@ -1005,6 +1020,13 @@ export class Sim {
     // extra solver iterations: with 4, contacts on small, light round parts
     // put measurable energy into the system (1 J/kg); 12 brings it to noise
     world.numSolverIterations = PHYS.solverIterations;
+    // Rapier solves friction at the velocity level, one pass per substep by
+    // default; under a steady sideways load (reflex motors holding a pose
+    // through planted feet) a little sliding was left every step, and feet
+    // in constant contact crept 0.1-0.5 m in 10 s even at friction 5. Four
+    // passes: most silent quadrupeds drift a few cm, and 11 of 12 stay up
+    // instead of 4 (about 30% slower). Scenes from before keep one pass.
+    world.integrationParameters.numInternalPgsIterations = sc.joints === 'old' ? 1 : PHYS.frictionPasses;
     if (land) {
       // an analytic half-space: Rapier's box-vs-cylinder contacts are its
       // least robust, and spinning cylinders on a box floor gained energy
@@ -1238,6 +1260,10 @@ export class Sim {
 
   step() {
     const { task, world } = this;
+    if (this.walkFalls && !this.posed && this.tStart !== null && this.t >= this.tStart) {
+      this.posed = true;
+      for (const c of this.creatures) if (c.valid) c.holdPose();
+    }
     const active = this.tStart !== null && this.t >= this.tStart;
     const cube = this.cubePos();
     const cs = this.creatures;

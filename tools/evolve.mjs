@@ -10,7 +10,7 @@
 //      SCENE=<json> scene overrides (sim.js SCENE), LEGACY=1 the old cube scene,
 //      TEAMS=2 competition between two species, each against the other's best
 //      (team B's history goes in the run file as rivalHistory),
-//      LAMARCK=1 keep learned weights (Hebbian weights written back into genomes),
+//      LAMARCK=0 don't keep learned weights (default: Hebbian weights are written back into genomes),
 //      TEAM_B=<plan> two teams with team B in another body plan (implies TEAMS=2),
 //      RESUME=<run file> continue that run (same arguments) up to [generations]:
 //      from its saved population, or for files saved before populations
@@ -31,9 +31,9 @@ const minArm = env('MIN_ARM', 0), islands = env('ISLANDS', 6), novelty = env('NO
 const parsePlan = a => { const r = /^radial(\d+)$/.exec(a); return r ? { type: 'radial', n: +r[1] } : { type: a }; };
 const body = { plan: parsePlan(planArg), round: roundArg === 'round', minArm };
 const planB = process.env.TEAM_B && process.env.TEAM_B !== planArg ? process.env.TEAM_B : '';
-const teams = planB ? 2 : env('TEAMS', 1), lamarck = !!env('LAMARCK', 0);
+const teams = planB ? 2 : env('TEAMS', 1), lamarck = !!env('LAMARCK', 1);
 const bodyB = planB ? { ...body, plan: parsePlan(planB) } : null;
-const tag = `${task}-${seed}${planArg !== 'free' ? '-' + planArg : ''}${body.round ? '-round' : ''}${minArm ? '-arm' + minArm : ''}${islands > 1 ? '-isl' + islands : ''}${novelty ? '-nov' + novelty : ''}${structural ? '-st' + structural : ''}${teams === 2 ? '-teams' : ''}${planB ? '-vs-' + planB : ''}${lamarck ? '-lam' : ''}${process.env.SEED_FROM ? '-seeded' : ''}`;
+const tag = `${task}-${seed}${planArg !== 'free' ? '-' + planArg : ''}${body.round ? '-round' : ''}${minArm ? '-arm' + minArm : ''}${islands > 1 ? '-isl' + islands : ''}${novelty ? '-nov' + novelty : ''}${structural ? '-st' + structural : ''}${teams === 2 ? '-teams' : ''}${planB ? '-vs-' + planB : ''}${lamarck ? '' : '-nolam'}${process.env.SEED_FROM ? '-seeded' : ''}`;
 const n = Math.max(1, cpus().length - 1);
 const pool = new Pool(onMsg => {
   const w = new Worker(new URL('../src/worker.js', import.meta.url));

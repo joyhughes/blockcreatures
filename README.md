@@ -466,6 +466,19 @@ under these rules it scores 0.12, nearly all for standing.
 default is now 2, grippy like rubber on a rough surface, so bodies can't skid
 around as easily and standing is easier. Runs from before keep 1.
 
+**Creeping feet** (fixed). Creatures standing still with their brains
+silent slid along: quadrupeds drifted up to 0.45 m in 10 s, with paws in
+constant contact sliding even at friction 5. Two causes. Reflexes aimed at
+the built pose, which a body standing on several feet can't reach exactly,
+so the joints fought each other through the ground; once measuring starts,
+reflexes now hold the pose the creature stands in (getting up and knocked
+down still aim at the built pose). And Rapier solves friction at the
+velocity level, one pass per substep by default, which leaves a little
+sliding under a steady sideways load each step. New scenes use four passes
+(about 30% slower): 9 in 12 silent quadrupeds stay up, instead of 4, and most
+drift a few centimetres; the worst still creeps about 1 cm/s, which the
+sliding rule below discounts. Runs from before keep one pass.
+
 **Sliding isn't walking.** Each step, the slowest foot on the ground is the
 creature's anchor, and however far the anchor itself slides is subtracted
 from its progress. A planted foot slides nowhere, so walking and shuffling
@@ -526,12 +539,12 @@ stood.
   w): inputs that fire with it grow stronger, and the weights stay bounded.
   Only neurons that are firing learn, so in random brains most synapses stay
   put.
-- **Keep learned weights** (Evolution panel; `LAMARCK=1` for the command
-  line): what a brain's Hebbian synapses learn carries from each trial to the
+- **Keep learned weights** (Evolution panel, on by default; `LAMARCK=0` turns
+  it off on the command line): what a brain's Hebbian synapses learn carries from each trial to the
   next, and is written back into its genome after the test (averaged over a
   gene's copies), so survivors keep it and offspring inherit it. That's
   Lamarckian inheritance. Off, every life starts from the weights it was born
-  with.
+  with; runs saved before the setting existed keep it off.
 - **A bigger brain**: up to 8 neurons per part (was 4) and 16 global neurons
   (was 4), room for a central network that the eyes and body senses feed.
 

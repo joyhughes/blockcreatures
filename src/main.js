@@ -694,7 +694,7 @@ function loadRun(d, name) {
   $('teams').value = String(d.teams || 1);
   $('planB').value = d.bodyB?.plan.type || '';
   $('novelty').value = String(d.novelty ?? 0); $('structural').value = String(d.structural ?? 0); $('migrate').value = String(d.migrate ?? 10);
-  $('lamarck').checked = !!d.lamarck;
+  $('lamarck').checked = d.lamarck ?? false;   // saves from before the setting: off, as they evolved
   showPlan();
   newRun();
   evolver.scene = d.scene ?? null;   // saves from before scenes: the legacy scene
