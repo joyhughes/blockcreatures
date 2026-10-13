@@ -498,6 +498,14 @@ on frontal area) makes tucking low and narrow pay. A ski on the snow is felt
 on its foot's underside. Random creatures slid 4–9 m in 10 s, with no energy
 gain.
 
+The first winners gamed it: a quadruped skied with its head dragging on the
+snow as a third runner (14.8 m), and an insect sledged on its belly, its
+skis down only a third of the time. Now only the skis and their feet may
+touch the snow, with no allowance for parts resting on it at the start; a
+creature that does is fallen, and scores only for standing. Under that rule
+the best of the first runs is a biped that rides its skis the whole way
+(8.1 m in 10 s).
+
 **Walking is falling forward and catching yourself.** A beginner takes a
 step or two and falls, and rolling the score back 2 s erased exactly those
 first steps, so there was nothing to climb toward but standing still or
@@ -555,6 +563,15 @@ tests it knocked over about 7 in 16 standing random quadrupeds and 3 in 16
 bipeds, and no insects (low and wide, they get shoved but don't tip), with no
 audit failures in 48 runs. Scene: *Pendulum mass*.
 
+Evolution found two ways out: dodging the ball, and taking the hit propped
+on a tail. So the ball is now bigger (0.35 m) and aimed 0.15 m above the
+centre of mass, to tip rather than shove (10 in 16 random quadrupeds go
+over); standing counts only real feet (feet, paws, toes, lower legs, claws:
+propped on a tail isn't standing); and a creature never knocked over (tilted
+past 60°, or below 60% of its height, after the strike) keeps only half its
+score, since getting back up is the point. Heavier balls knocked over few
+more and broke the energy audit (2–3 in 16), so the mass stays at 2.
+
 **Standing first.** Walking adds a standing bonus, weighted by the Scene
 setting *Standing bonus* (0.1 by default): half the share of the time it
 stayed up, half how tall it stood as measuring began. Raise it to make
@@ -569,7 +586,9 @@ stood.
 
 ## Eyes, proprioception and a learning brain
 
-- **Eyes**: two on the head (the template's head part, else the root), drawn
+- **Eyes**: two on the head (an animal's head part, else its chest; for
+  other bodies, the part furthest forward and up near the middle; the root,
+  the first fallback, put a headless biped's eyes on its pelvis), drawn
   as white eyes with pupils. Where they sit is an evolvable trait,
   `genome.eyes.spread` (0–1): at 0 they're on the front of the head, gazing
   10° off straight ahead; at 1 they're on the sides, gazing straight out.

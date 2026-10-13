@@ -203,7 +203,10 @@ const START_POSE = {
 const STEP_AIR = 0.15, STEP_LEN = 0.02, STEP_MAX = 20;   // walking with falls: a step is a foot off the ground this long (s), landing this much (m) further along its way than it lifted
 const FALL_TILT = Math.PI / 3, FALL_LOW = 0.6, FALL_BACK = 2, FALL_GRACE = 2;   // walking with falls: see Sim.step (2 s: a slow topple can lean for over a second before it passes FALL_TILT)
 // knocked down: the pendulum (a ball on a rigid rope from a fixed pivot)
-const KNOCK = { delay: 1, len: 2.5, angle: 75 * Math.PI / 180, r: 0.25 };
+// (r 0.35, aimed `aim` above the centre of mass: a 0.25 m ball at the centre was dodged or shrugged off)
+const KNOCK = { delay: 1, len: 2.5, angle: 75 * Math.PI / 180, r: 0.35, aim: 0.15 };
+// getting up and knocked down, new scenes: the parts that are feet for standing (not tails or flukes)
+const REAL_FEET = ['foot', 'paw', 'toe', 'lowerLeg', 'frontLower', 'clawLower'];
 // skiing: the planks under the feet (half extents: length, thickness, width), and which template parts get them
 const SKI = { half: [0.3, 0.01, 0.045], grip: 1.0 };
 const SKI_ROLES = ['foot', 'paw', 'lowerLeg', 'frontLower', 'clawLower'];
@@ -506,9 +509,17 @@ export class Creature {
   // reversed (mirrorEye). The binocular grid looks ahead from between the
   // eyes; a pixel counts only if it lies in both eyes' fields.
   makeEyes() {
+    // the head; for an animal without one, its chest; otherwise the part
+    // furthest forward and up, near the middle, which reads as a head (the root, the
+    // first fallback, was a biped's pelvis or any block of a free body)
     const roles = TEMPLATES[this.genome.plan?.type] ? this.parts.map(p => this.genome.nodes[p.node].role) : null;
     let head = roles ? roles.indexOf('head') : -1;
-    if (head < 0) head = 0;
+    if (head < 0 && roles) head = roles.indexOf('chest');
+    if (head < 0) {
+      head = 0;
+      const ahead = p => p.center[0] + 0.5 * p.center[1] - Math.abs(p.center[2]);   // forward, up, and near the middle
+      this.parts.forEach((p, k) => { if (ahead(p) > ahead(this.parts[head])) head = k; });
+    }
     const p = this.parts[head], qi = qconj(this.partQ[head]);
     const F = qrot(qi, [1, 0, 0]), U = qrot(qi, [0, 1, 0]), L = qrot(qi, [0, 0, 1]);
     const ext = u => support(p, [[1, 0, 0], [0, 1, 0], [0, 0, 1]], u);
@@ -1361,7 +1372,7 @@ export class Sim {
   // passes through the centre of mass. Its energy is added to the books.
   hangPendulum() {
     const c = this.creatures[0], com = c.com(), a = this.knock.angle;
-    const pivot = [com[0], com[1] + KNOCK.len, com[2]], d = [Math.cos(a), 0, Math.sin(a)];
+    const pivot = [com[0], com[1] + KNOCK.aim + KNOCK.len, com[2]], d = [Math.cos(a), 0, Math.sin(a)];
     const b = [pivot[0] + d[0] * KNOCK.len * Math.sin(KNOCK.angle), pivot[1] - KNOCK.len * Math.cos(KNOCK.angle), pivot[2] + d[2] * KNOCK.len * Math.sin(KNOCK.angle)];
     const fixed = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(...pivot));
     const ball = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(...b).setCanSleep(false));
@@ -1416,6 +1427,23 @@ export class Sim {
         for (let i = 0; i < c.nb; i++) c.bodies[i].applyImpulse(V(scale(u, -imp * c.mass[i] / c.totalMass)), true);
       }
     }
+  }
+
+  // Getting up and knocked down: how well it stands, 0..1: the root's
+  // uprightness, (1 + up) / 2, x its centre of mass's height as a share of
+  // the built pose's, halved while any part but its feet touches the ground.
+  // New scenes count only real feet (REAL_FEET; propped on a tail isn't
+  // standing); before, a template's ground parts (tails too), or else the
+  // parts on the ground as built.
+  standing(c, y) {
+    const u = qrot(c.partPose(0).q, qrot(qconj(c.partQ[0]), [0, 1, 0]));
+    const roles = TEMPLATES[c.genome.plan?.type]?.roles;
+    const foot = k => {
+      const role = c.genome.nodes[c.parts[k].node].role;
+      return roles ? (this.scene.falls ? REAL_FEET.includes(role) : !!roles[role]?.ground) : c.feet.has(k);
+    };
+    const down = c.parts.some((p, k) => c.onGround[k] && !foot(k));
+    return { s: (1 + u[1]) / 2 * Math.max(0, Math.min(1, y / c.standY)) * (down ? 0.5 : 1), up: u[1] };
   }
 
   // what an eye sees as salient: the prize (ball, cube or barbell) or another creature's body
@@ -1490,6 +1518,14 @@ export class Sim {
           const roles = TEMPLATES[c.genome.plan?.type]?.roles;
           tr.resting = new Set(c.parts.map((p, k) => (c.onGround[k] && !roles?.[c.genome.nodes[p.node].role]?.prop ? k : -1)).filter(k => k >= 0));
           tr.h0 = c.com()[1] / c.standY;   // how tall it stands as measuring starts
+          // skiing: only the skis and their feet may touch the snow, no
+          // resting parts: winners dragged a head as a third runner, or
+          // sledged on their bellies
+          if (c.skis) {
+            const on = new Set(c.skis.map(s => s.body));
+            tr.feet = k => on.has(c.partBody[k]);
+            tr.resting = new Set();
+          }
         }
         const up = qrot(c.partPose(0).q, qrot(qconj(c.partQ[0]), [0, 1, 0]))[1];
         const low = tr.y0 !== undefined && c.com()[1] < FALL_LOW * tr.y0;
@@ -1669,25 +1705,19 @@ export class Sim {
       // jumping), each measured step until a fall
       tr.hSum = (tr.hSum || 0) + Math.max(0, Math.min(1, y / c.standY));
     } else if (task.kind === 'knock' && this.knock.at !== null) {
-      // knocked down: standing, as in getting up, from the strike on
-      const q = c.partPose(0).q, u = qrot(q, qrot(qconj(c.partQ[0]), [0, 1, 0]));
-      const roles = TEMPLATES[c.genome.plan?.type]?.roles;
-      const foot = k => (roles ? roles[c.genome.nodes[c.parts[k].node].role]?.ground : c.feet.has(k));
-      const down = c.parts.some((p, k) => c.onGround[k] && !foot(k));
-      const s = (1 + u[1]) / 2 * Math.max(0, Math.min(1, y / c.standY)) * (down ? 0.5 : 1);
+      // knocked down: standing, as in getting up, from the strike on; and
+      // whether it was knocked over (tilted past 60 degrees, or below 60% of
+      // its height), since getting back up is the point
+      const { s, up } = this.standing(c, y);
+      if (up < 0.5 || y < 0.6 * c.standY) tr.knocked = true;
       tr.sum = (tr.sum || 0) + s; tr.n = (tr.n || 0) + 1;
       if (elapsed >= this.T * 2 / 3) { tr.late = (tr.late || 0) + s; tr.nLate = (tr.nLate || 0) + 1; }
     } else if (task.kind === 'getup') {
       // standing: the root's uprightness, (1 + up) / 2 (on its back 0, on its
       // side 0.5, as built 1, so rolling over already counts) x the centre of
       // mass's height as a share of the built pose's (no more for jumping),
-      // halved while any part but its feet touches the ground: a template's
-      // ground parts, or else the parts on the ground as built
-      const q = c.partPose(0).q, u = qrot(q, qrot(qconj(c.partQ[0]), [0, 1, 0]));
-      const roles = TEMPLATES[c.genome.plan?.type]?.roles;
-      const foot = k => (roles ? roles[c.genome.nodes[c.parts[k].node].role]?.ground : c.feet.has(k));
-      const down = c.parts.some((p, k) => c.onGround[k] && !foot(k));
-      const s = (1 + u[1]) / 2 * Math.max(0, Math.min(1, y / c.standY)) * (down ? 0.5 : 1);
+      // halved while any part but its feet touches the ground (see standing)
+      const { s } = this.standing(c, y);
       tr.sum = (tr.sum || 0) + s; tr.n = (tr.n || 0) + 1;
       if (elapsed >= this.T * 2 / 3) { tr.late = (tr.late || 0) + s; tr.nLate = (tr.nLate || 0) + 1; }
     } else if (task.kind === 'upright') {
@@ -1869,7 +1899,10 @@ export class Sim {
         return 0.5 * up + 0.5 * Math.min(1, (tr.hSum || 0) / steps);
       }
       // getting up: standing over the last third, plus a quarter for the whole time
-      if (task.kind === 'getup' || task.kind === 'knock') return tr.nLate ? 0.75 * tr.late / tr.nLate + 0.25 * tr.sum / tr.n : 0;
+      if (task.kind === 'getup') return tr.nLate ? 0.75 * tr.late / tr.nLate + 0.25 * tr.sum / tr.n : 0;
+      // knocked down: never knocked over (dodged, or shrugged it off) keeps
+      // half: getting back up is what scores best
+      if (task.kind === 'knock') return tr.nLate ? (0.75 * tr.late / tr.nLate + 0.25 * tr.sum / tr.n) * (tr.knocked ? 1 : 0.5) : 0;
       // stairs: half the COM's rise, half the lowest point's final height,
       // so standing up tall earns little and every part has to climb
       if (task.kind === 'climb') return tr.last === undefined ? 0 : Math.max(0, 0.5 * (tr.last - tr.y0) + 0.5 * Math.max(0, tr.low));
