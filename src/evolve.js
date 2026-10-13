@@ -18,6 +18,7 @@
 // limb, a duplicated segment, a chain, a moved attachment, ...), where plain
 // mutation is almost all parameter tweaks.
 
+import { applyLearned } from './brain.js';
 import { TEMPLATES, randomGenome, mutate, structural, descriptor, crossover, graft, clone, develop, interpenetrates, tooBig, armLength, growArm, JOINT_DOFS } from './genome.js';
 import { makeRng } from './math.js';
 import { TASKS } from './sim.js';
@@ -44,7 +45,11 @@ export class Evolver {
   // best of the previous generation (Sims' interspecies competition). Team B
   // is a second Evolver in `rival`; this one is team A. bodyB: team B's body
   // (its own plan, so snakes can play insects); null = the same as team A's.
-  constructor({ task, popSize = 300, survival = 0.2, seed = 1, evaluate, body = {}, bodyB = null, islands = 1, migrate = 10, novelty = 0, structural = 0, scene = null, teams = 1 }) {
+  // lamarck: keep learned weights. Each creature's Hebbian weights carry
+  // through its trials and are written back into its genome after, so
+  // survivors keep and offspring inherit what was learned.
+  constructor({ task, popSize = 300, survival = 0.2, seed = 1, evaluate, body = {}, bodyB = null, islands = 1, migrate = 10, novelty = 0, structural = 0, scene = null, teams = 1, lamarck = false }) {
+    this.lamarck = lamarck;
     this.body = body;
     this.scene = scene;   // sim scene parameters (sim.js SCENE); null = the legacy scene
     this.islands = Math.max(1, Math.min(islands, Math.floor(popSize / 10)));
@@ -64,7 +69,7 @@ export class Evolver {
     this.opponent = null;   // competition and cooperation: best of the previous generation
     this.champ = null;      // this population's best of the latest generation
     this.teams = teams === 2 && TASKS[task].pair ? 2 : 1;
-    this.rival = this.teams === 2 ? new Evolver({ task, popSize, survival, seed: seed * 7919 + 101, evaluate, body: bodyB || body, islands, migrate, novelty, structural, scene }) : null;
+    this.rival = this.teams === 2 ? new Evolver({ task, popSize, survival, seed: seed * 7919 + 101, evaluate, body: bodyB || body, islands, migrate, novelty, structural, scene, lamarck }) : null;
     if (this.rival) this.rival.team = 1;
   }
 
@@ -134,7 +139,7 @@ export class Evolver {
   async step() {
     const r = this.rival;
     if (!r) return this.stepOne();
-    for (const k of ['scene', 'novelty', 'structural', 'migrate']) r[k] = this[k];
+    for (const k of ['scene', 'novelty', 'structural', 'migrate', 'lamarck']) r[k] = this[k];
     if (this.rescore) r.rescore = true;
     if (!r.pop.length) r.seed();
     const a = this.champ || this.pop[this.rng.int(this.pop.length)].g;
@@ -150,17 +155,21 @@ export class Evolver {
     // the scene changed (main.js): scores from the old one don't carry over
     if (this.rescore) { this.rescore = false; for (const p of this.pop) p.fit = null; }
     // tasks whose conditions change between generations get re-evaluated
-    const varying = task.kind === 'follow' || !!task.pair;
-    const phase = task.kind === 'follow' ? rng() * 2 * Math.PI : 0;
+    const varying = task.kind === 'follow' || task.kind === 'knock' || !!task.pair;
+    const phase = task.kind === 'follow' || task.kind === 'knock' ? rng() * 2 * Math.PI : 0;
     const todo = this.pop.filter(p => varying || p.fit === null);
     if (task.pair && !this.opponent) this.opponent = this.pop[rng.int(this.pop.length)].g;
     const jobs = todo.map(p => ({
       task: this.task,
       genomes: task.pair ? [p.g, this.opponent] : [p.g],
-      opts: { phase, scene: this.scene },
+      opts: { phase, scene: this.scene, learn: this.lamarck },
     }));
     const res = await this.evaluate(jobs);
-    todo.forEach((p, i) => { p.fit = res[i][0]; });
+    todo.forEach((p, i) => {
+      const r = res[i];
+      if (Array.isArray(r)) p.fit = r[0];
+      else { p.fit = r.fit[0]; if (r.learned) applyLearned(p.g, r.learned); }
+    });
 
     this.pop.sort((a, b) => b.fit - a.fit);
     const div = this.measureNovelty();
@@ -243,7 +252,7 @@ export class Evolver {
     kids.forEach((k, i) => { k.fit = res[i][0]; });
     if (this.rival) await this.rival.mateIslands();
     kids.sort((x, y) => y.fit - x.fit);
-    const varying = task.kind === 'follow' || !!task.pair;
+    const varying = task.kind === 'follow' || task.kind === 'knock' || !!task.pair;
     const placed = new Set();
     kids.slice(0, 2 * this.islands).forEach((k, i) => {
       const isl = i % this.islands;

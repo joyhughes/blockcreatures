@@ -10,8 +10,8 @@
 // here rather than by the engine, as in Sims' system.
 
 import RAPIER from './rapier.js';
-import { develop, interpenetrates, tooBig, bounds, JOINT_DOFS, NSENS, NEYE, EYE_H, EYE_V, EYE_CH, EYE_RANGE, eyeIndex, TEMPLATES } from './genome.js';
-import { compileBrain, brainStep, initBrain } from './brain.js';
+import { develop, interpenetrates, tooBig, bounds, JOINT_DOFS, NSENS, NEYE, EYE_H, EYE_V, EYE_CH, EYE_RANGE, EYE_GAZE, EYE_SPREAD, eyeIndex, TEMPLATES } from './genome.js';
+import { compileBrain, brainStep, initBrain, learnedWeights, applyLearned } from './brain.js';
 import { quatFromMat, qmul, qconj, qrot, qlog, dot, sub, add, scale, cross, len } from './math.js';
 
 let ready = null;
@@ -77,19 +77,26 @@ export const TASKS = {
   quadruped: { label: 'Quadruped walking', env: 'land', duration: 10, settle: 1, trials: 1, kind: 'upright', plan: 'quadruped',
     scene: { settle: 'timed' } },
   // a light cube on the ground beside it: lift it as high as it can hold it
+  // "I get knocked down, but I get up again": a pendulum swings in from a
+  // random direction (two opposite ones, re-drawn each generation) and
+  // knocks the creature over; it scores for standing again
+  knock: { label: 'Knocked down', env: 'land', duration: 12, settle: 1, trials: 2, kind: 'knock', scene: { settle: 'timed' } },
+  // stand as long and as tall as it can, under walking's fall rules
+  stand: { label: 'Standing', env: 'land', duration: 10, settle: 1, trials: 1, kind: 'stand', scene: { settle: 'timed' } },
   // stand up from lying or sitting (scene `start`), and stay up
   getUp: { label: 'Getting up', env: 'land', duration: 10, settle: 0.5, trials: 1, kind: 'getup', scene: { settle: 'timed' } },
   lift: { label: 'Lifting', env: 'land', duration: 15, settle: 1, trials: 1, kind: 'lift',
     scene: { ball: 'barbell', ballSize: 0.2, ballMass: 0.3, duration: 15 } },
 };
 // targets that came after scenes: a run without one has no legacy scene
-const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright', 'getup'];
+const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright', 'getup', 'stand', 'knock'];
 
 // Scene parameters, adjustable per run (the UI's Scene section). A run's
 // scene travels with its jobs, history and champions; a saved creature
 // without one replays under LEGACY_SCENE, the conditions it evolved in.
 //   duration   seconds measured after settling (null = the task's own)
-//   gravity    m/s^2 on land          friction   ground and body friction
+//   gravity    m/s^2 on land          friction   ground and body friction (coefficient; 2 = grippy,
+//              rubber on a rough surface; it was 1, and scenes from before keep 1)
 //   drag       water viscosity        lightDist  light's distance (following)
 //   strength   muscle strength, x PHYS.strength (all creatures)
 //   toneMin, levelMin, braceMin   every joint's reflex gains are at least these (0..1), whatever
@@ -98,6 +105,16 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 //   jointDamp  passive joint damping, per unit effective inertia
 //   jointRange every joint limit is cut to within this many radians of the built angle (1.6 =
 //              no change); small ranges stop legs circling like paddlewheels
+//   joints     'limited': Rapier holds every joint within its limits; 'rolling': the same, but
+//              twist axes spin freely (wheels); 'old': inelastic stops applied by hand, which a
+//              body's weight could push through (scenes from before joints existed)
+//   falls      walking on land: the walk ends, and stops counting, when a part other than the
+//              creature's feet touches the ground (template ground parts; otherwise the parts on the
+//              ground when measuring starts; snakes are all feet); false = scenes from before
+//   standWeight walking with falls: weight of the standing bonus (half the share of the time up,
+//              half the height it stood at when measuring began). Start high so standing pays,
+//              then lower it as gaits appear
+//   knockMass  knocked down: the pendulum ball's mass, a multiple of the creature's
 //   start      getting up: the pose it starts in, 'side' (rolled onto its side), 'back' (upside
 //              down) or 'sitting' (pitched back 60 degrees, rump down)
 //   buoyancy   surface swimming: water's density relative to the creatures' (1.5 floats a
@@ -132,20 +149,21 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 //   together   cooperation: the share of the score (0..1) given for the share of the measured time
 //              both creatures touch the ball at once
 export const SCENE = {
-  duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6, buoyancy: 1.5, start: 'side',
+  duration: null, gravity: 9.81, friction: 2.0, drag: 3, lightDist: 6, buoyancy: 1.5, start: 'side',
   strength: 1, toneMin: 0, levelMin: 0, braceMin: 0, toneRate: 8, reflexRate: 6, jointDamp: 3, jointRange: 1.6,
+  joints: 'limited', falls: true, standWeight: 0.1, knockMass: 2,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
   stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
 };
 // competition as the bundled champions evolved it: a 0.8 m cube 1.5 m away
-export const LEGACY_SCENE = { ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0 };
+export const LEGACY_SCENE = { friction: 1, joints: 'old', falls: false, ball: 'cube', ballSize: 0.4, ballMass: 0.256, gap: 1.5, zone: 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0 };
 // a task's default scene: SCENE with the task's own ball
 export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene || {}) });
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0 };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0, joints: 'old', falls: false, friction: 1 };
   const legacy = NEW_KINDS.includes(TASKS[taskName].kind) ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -160,6 +178,8 @@ const WRESTLE_CENTRE = 0.5;   // wrestling: weight of holding the middle (mean d
 // Rapier axis numbers (3-5 = rotation about the joint frame's X, Y, Z) left
 // free by each joint type, as created in Creature
 const AXES = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+// joints built in our frame (hard limits): Rapier axes locked besides position, per joint type
+const FRAME_LOCK = { spherical: 0, revolute: 8 | 32, twist: 16 | 32, universal: 8, bendtwist: 32, twistbend: 16 };
 const MOTOR_AXES = { spherical: [3, 4, 5], revolute: [3], twist: [3], universal: [4, 5], bendtwist: [4, 5], twistbend: [4, 5] };
 // getting up: start poses, turned from the built (standing) pose; X is forward, Z to the side
 const START_POSE = {
@@ -167,6 +187,9 @@ const START_POSE = {
   back: { x: 1, y: 0, z: 0, w: 0 },                                  // upside down
   sitting: { x: 0, y: 0, z: Math.sin(Math.PI / 6), w: Math.cos(Math.PI / 6) },   // pitched back 60 degrees, nose up
 };
+const FALL_TILT = Math.PI / 3, FALL_LOW = 0.6, FALL_BACK = 2, FALL_GRACE = 2;   // walking with falls: see Sim.step (2 s: a slow topple can lean for over a second before it passes FALL_TILT)
+// knocked down: the pendulum (a ball on a rigid rope from a fixed pivot)
+const KNOCK = { delay: 1, len: 2.5, angle: 75 * Math.PI / 180, r: 0.25 };
 const BUOY_BAND = 0.05;   // surface water: buoyancy on a sample point fades in over this depth (m)
 // share of a sample point's buoyancy at height y (0 above the band, 1 below),
 // and its potential: dP/dy = -wet(y), so buoyancy is conservative
@@ -265,7 +288,7 @@ export class Creature {
     const ph = opts.phys || {};
     this.ph = { strength: ph.strength ?? 1, floor: [ph.toneMin || 0, ph.levelMin || 0, ph.braceMin || 0],
       toneRate: ph.toneRate ?? PHYS.toneRate, reflexRate: ph.reflexRate ?? PHYS.reflexRate,
-      damp: ph.jointDamp ?? PHYS.jointDamp, range: Math.min(PHYS.limitMax, ph.jointRange ?? PHYS.limitMax) };
+      damp: ph.jointDamp ?? PHYS.jointDamp, range: Math.min(PHYS.limitMax, ph.jointRange ?? PHYS.limitMax), joints: ph.joints || 'old' };
     this.valid = parts.length > 0 && !tooBig(parts) && !interpenetrates(parts);
     this.parts = parts;
     if (!this.valid) return;
@@ -371,8 +394,27 @@ export class Creature {
         case 'bendtwist': jd = RAPIER.JointData.generic(V(a1), V(a2), V(F[2]), L | AX); break;
         case 'twistbend': jd = RAPIER.JointData.generic(V(a1), V(a2), V(F[1]), L | AX); break;
       }
+      // Joint limits held by Rapier (scene joints 'limited' or 'rolling'):
+      // the joint is built in our joint frame F, so Rapier's X, Y, Z are our
+      // twist and two bend axes, and its limits are ours. The old inelastic
+      // stops (joints 'old') were sized for the lightest case, and a body's
+      // weight pushed legs up to 3 rad past them, round and round: insects
+      // rolled on their joints. 'rolling' leaves the twist axis free.
+      const hard = this.ph.joints !== 'old';
+      if (hard) jd = RAPIER.JointData.generic(V(a1), V(a2), V(F[0]), L | FRAME_LOCK[p.joint]);
       const joint = world.createImpulseJoint(jd, this.bodies[pb], this.bodies[cb], true);
       joint.setContactsEnabled(false);
+      if (hard) {
+        const qF = quatFromMat(F);
+        joint.setFrameX1(qF); joint.setFrameX2(qF);
+        const lim = genome.nodes[p.node].limits, raw = world.impulseJoints.raw;
+        for (const k of dofs) {
+          if (k === 0 && this.ph.joints === 'rolling') continue;
+          const lo = Math.max(-this.ph.range, lim[k][0]), hi = Math.min(this.ph.range, lim[k][1]);
+          // limits are on our angle, sigma x Rapier's
+          raw.jointSetLimits(joint.handle, 3 + k, sigma[k] > 0 ? lo : -hi, sigma[k] > 0 ? hi : -lo);
+        }
+      }
       const par = parts[p.parent];
       // effective inertia of the relative rotation about each joint axis:
       // each body's inertia about the axis through its own centre of mass,
@@ -395,7 +437,7 @@ export class Creature {
         servo: !!this.genome.nodes[p.node].servo,
         reflex: rf, anyReflex: rf.some(x => x > 0), effort: [0, 0, 0], iP, iC, pp: p.parent, upC: upOf(i), upP: upOf(p.parent),
         // Rapier's motor axes: the free angular axes of the joint's frame on the parent
-        handle: joint.handle, f1: joint.frameX1(), raxes: MOTOR_AXES[p.joint], mTarget: [0, 0, 0], mRate: [0, 0, 0], mMax: 0, motors: false,
+        handle: joint.handle, f1: joint.frameX1(), raxes: hard ? dofs.map(k => 3 + k) : MOTOR_AXES[p.joint], hard, mTarget: [0, 0, 0], mRate: [0, 0, 0], mMax: 0, motors: false,
         eff: dofs.map(a => effIndex.get(i * 3 + a)),
         angle: [0, 0, 0], rate: [0, 0, 0], axis: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
         mt: [0, 0, 0], mr: [0, 0, 0],
@@ -411,13 +453,15 @@ export class Creature {
     this.makeEyes();
   }
 
-  // Two eyes on the head (the template's head part, else the root), one on
-  // each side, set into its surface a little forward and up. Directions are
-  // in the head's frame, from the creature's forward (X), up (Y) and side
-  // (Z) as built; eye 0 is on the +Z side. Each pixel's ray turns from the
-  // eye's gaze (out and 45 degrees forward) by its azimuth about up and its
-  // elevation, the same formula for both eyes, so a mirror image of one eye's
-  // pixel is the other eye's pixel with the azimuth reversed (mirrorEye).
+  // Two eyes on the head (the template's head part, else the root). Spread
+  // (genome.eyes) moves them from the front of the head, gazing nearly ahead,
+  // to its sides, gazing straight out. Directions are in the head's frame,
+  // from the creature's forward (X), up (Y) and side (Z) as built; eye 0 is
+  // on the +Z side. Each pixel's ray turns from the eye's gaze by its azimuth
+  // about up and its elevation, the same formula for both eyes, so a mirror
+  // image of one eye's pixel is the other eye's pixel with the azimuth
+  // reversed (mirrorEye). The binocular grid looks ahead from between the
+  // eyes; a pixel counts only if it lies in both eyes' fields.
   makeEyes() {
     const roles = TEMPLATES[this.genome.plan?.type] ? this.parts.map(p => this.genome.nodes[p.node].role) : null;
     let head = roles ? roles.indexOf('head') : -1;
@@ -426,18 +470,34 @@ export class Creature {
     const F = qrot(qi, [1, 0, 0]), U = qrot(qi, [0, 1, 0]), L = qrot(qi, [0, 0, 1]);
     const ext = u => support(p, [[1, 0, 0], [0, 1, 0], [0, 0, 1]], u);
     const r = Math.max(0.03, Math.min(0.08, 0.25 * Math.min(...p.half)));   // drawn size only
+    const spread = Math.max(0, Math.min(1, this.genome.eyes?.spread ?? EYE_SPREAD));
+    const deg = Math.PI / 180, gz = (EYE_GAZE[0] + spread * (EYE_GAZE[1] - EYE_GAZE[0])) * deg;
+    this.eyeGaze = gz / deg;
+    // a retina: rays turned from `gaze` (horizontal) by azimuth and elevation
+    const retina = (gaze, width) => {
+      const across = cross(U, gaze), rays = [];
+      for (let v = 0; v < EYE_V; v++) for (let h = 0; h < EYE_H; h++) {
+        const az = (h / (EYE_H - 1) - 0.5) * width * deg, el = (v / (EYE_V - 1) - 0.5) * 50 * deg;
+        const hz = add(scale(gaze, Math.cos(az)), scale(across, Math.sin(az)));
+        rays.push({ h, v, az: az / deg, d: add(scale(hz, Math.cos(el)), scale(U, Math.sin(el))) });
+      }
+      return rays;
+    };
     this.eyes = [1, -1].map(side => {
       const lat = scale(L, side);
-      const pos = add(add(scale(lat, ext(lat) * 0.92), scale(F, 0.35 * ext(F))), scale(U, 0.3 * ext(U)));
-      const gaze = scale(add(lat, F), Math.SQRT1_2), across = cross(U, gaze);
-      const rays = [];
-      for (let v = 0; v < EYE_V; v++) for (let h = 0; h < EYE_H; h++) {
-        const az = (h / (EYE_H - 1) - 0.5) * 80 * Math.PI / 180, el = (v / (EYE_V - 1) - 0.5) * 50 * Math.PI / 180;
-        const hz = add(scale(gaze, Math.cos(az)), scale(across, Math.sin(az)));
-        rays.push({ h, v, d: add(scale(hz, Math.cos(el)), scale(U, Math.sin(el))) });
-      }
-      return { part: head, pos, gaze, r, rays };
+      // on the side, a little forward and up; or on the front, either side of the middle
+      const onSide = add(add(scale(lat, ext(lat) * 0.92), scale(F, 0.35 * ext(F))), scale(U, 0.3 * ext(U)));
+      const onFront = add(add(scale(F, ext(F) * 0.92), scale(lat, 0.45 * ext(lat))), scale(U, 0.3 * ext(U)));
+      const t = (gz / deg - EYE_GAZE[0]) / (EYE_GAZE[1] - EYE_GAZE[0]);
+      const pos = add(scale(onFront, 1 - t), scale(onSide, t));
+      const gaze = add(scale(F, Math.cos(gz)), scale(lat, Math.sin(gz)));
+      return { part: head, pos, gaze, r, rays: retina(gaze, 80) };
     });
+    // binocular: ahead from between the eyes, where both fields (80 degrees
+    // wide about their gazes) cover the direction
+    const mid = scale(add(this.eyes[0].pos, this.eyes[1].pos), 0.5);
+    const both = 40 - gz / deg;
+    this.bino = { part: head, pos: mid, rays: retina(F, 50).filter(ray => Math.abs(ray.az) <= both + 1e-9) };
   }
 
   // Fill the eye pixels (only if the brain reads them: rays are the costly
@@ -449,14 +509,16 @@ export class Creature {
     if ((this.looks = (this.looks || 0) + 1) % 2 === 0) { S.set(this.seen, E0); return; }
     const own = this.colliderPart;
     const pred = col => !own.has(col.handle);
-    this.eyes.forEach((eye, e) => {
+    // eyes 0 and 1 see distance only coarsely; the binocular grid (2) exactly
+    [...this.eyes, this.bino].forEach((eye, e) => {
       const { c, q } = this.partPose(eye.part), o = add(c, qrot(q, eye.pos));
       for (const ray of eye.rays) {
         const d = qrot(q, ray.d);
         const hit = this.world.castRay(new RAPIER.Ray(V(o), V(d)), EYE_RANGE, true, undefined, undefined, undefined, undefined, pred);
         const i = E0 + eyeIndex(e, ray.h, ray.v, 0);
         if (!hit) { S[i] = 0; S[i + 1] = 0; continue; }
-        S[i] = 1 - hit.timeOfImpact / EYE_RANGE;
+        const near = 1 - hit.timeOfImpact / EYE_RANGE;
+        S[i] = e === 2 ? near : Math.ceil(near * 3) / 3;
         const body = hit.collider.parent();
         S[i + 1] = body && salient(body.handle) ? 1 : 0;
       }
@@ -779,7 +841,8 @@ export class Creature {
         // which evolution amplified into "jumps". Sized with the lower-bound
         // inertia, the impulse can only under-correct, so it never adds energy
         // beyond the small return speed.
-        const ex = ang > hi ? ang - hi : ang < lo ? ang - lo : 0;
+        // (joints with hard limits: Rapier holds them, except a rolling twist)
+        const ex = j.hard ? 0 : ang > hi ? ang - hi : ang < lo ? ang - lo : 0;
         if (ex !== 0) {
           const s = Math.sign(ex);
           const target = -s * Math.min(PHYS.limitReturn * Math.abs(ex), PHYS.limitReturnMax);
@@ -933,7 +996,10 @@ export class Sim {
     this.g = land || this.surface ? sc.gravity : 0;
     // Sims' settling: relax with no friction and no muscles until the centre
     // of mass stops dropping; toppling then can't carry the body anywhere
-    this.relaxing = land && sc.settle === 'stable';
+    // Animal templates (scene falls on: new runs) settle standing instead,
+    // reflexes on, as biped and quadruped walking always did: an insect
+    // relaxed with its muscles off lies on its belly before it starts.
+    this.relaxing = land && sc.settle === 'stable' && !(sc.falls && genomes.every(g => TEMPLATES[g.plan?.type]));
     const world = this.world = new RAPIER.World({ x: 0, y: -this.g, z: 0 });
     world.timestep = DT;
     // extra solver iterations: with 4, contacts on small, light round parts
@@ -1003,7 +1069,15 @@ export class Sim {
     this.xMin = 0;
     this.mass = this.creatures.reduce((s, c) => s + (c.valid ? c.totalMass : 0), 0) + (this.cube ? this.cube.mass() : 0);
     this.track = this.creatures.map(() => ({ start: null, mark: null, maxDist: 0, maxLow: 0, d0: 0 }));
+    // walking with falls: a part other than the feet touching the ground ends the walk
+    this.walkFalls = !!sc.falls && land && (task.kind === 'speed' || task.kind === 'upright' || task.kind === 'stand');
+    // ... and the sim runs FALL_GRACE s past the measured time: nothing then
+    // counts, but a fall does (a topple begun just before the end rolls back)
+    this.grace = this.walkFalls ? Math.round(FALL_GRACE / DT) : 0;
+    if (this.totalSteps !== Infinity) this.totalSteps += this.grace;
     this.relax = this.creatures.map(() => ({ minY: Infinity, still: 0 }));
+    // knocked down: the direction the pendulum comes from
+    if (task.kind === 'knock') this.knock = { angle: phase + trial * 2 * Math.PI / task.trials, at: null };
     if (this.creatures.every(c => !c.valid)) this.steps = this.totalSteps = 0;
   }
 
@@ -1100,14 +1174,63 @@ export class Sim {
       this.apart = null;
     }
     this.tStart = this.t;
-    this.totalSteps = this.steps + Math.round(this.T / DT);
+    this.totalSteps = this.steps + Math.round(this.T / DT) + (this.grace || 0);
   }
 
   get done() { return this.steps >= this.totalSteps; }
 
+  // walking with falls: a snapshot of a walk's score so far, kept every
+  // 0.1 s for the last FALL_BACK s, to roll back to on a fall
+  keepPast(tr) {
+    if (this.steps % 6) return;
+    (tr.past ??= []).push({ maxDist: tr.maxDist, last: tr.last, mark: tr.mark, minY: tr.minY, yMark: tr.yMark, minYMark: tr.minYMark });
+    if (tr.past.length > FALL_BACK * 10) tr.past.shift();
+  }
+
+  // walking with falls: which parts are feet, as a function of part index
+  feetOf(c) {
+    const roles = TEMPLATES[c.genome.plan?.type]?.roles;
+    if (roles) return k => { const r = roles[c.genome.nodes[c.parts[k].node].role]; return !!r?.ground && !r.prop; };
+    const on = new Set(c.parts.map((p, k) => (c.onGround[k] ? k : -1)).filter(k => k >= 0));
+    return k => on.has(k);
+  }
+
+  // knocked down: hang the pendulum over the creature's centre of mass and
+  // raise it KNOCK.angle toward the direction it comes from; its bottom
+  // passes through the centre of mass. Its energy is added to the books.
+  hangPendulum() {
+    const c = this.creatures[0], com = c.com(), a = this.knock.angle;
+    const pivot = [com[0], com[1] + KNOCK.len, com[2]], d = [Math.cos(a), 0, Math.sin(a)];
+    const b = [pivot[0] + d[0] * KNOCK.len * Math.sin(KNOCK.angle), pivot[1] - KNOCK.len * Math.cos(KNOCK.angle), pivot[2] + d[2] * KNOCK.len * Math.sin(KNOCK.angle)];
+    const fixed = this.world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(...pivot));
+    const ball = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(...b).setCanSleep(false));
+    const vol = 4 / 3 * Math.PI * KNOCK.r ** 3, m = (this.scene.knockMass ?? 2) * c.totalMass;
+    this.world.createCollider(RAPIER.ColliderDesc.ball(KNOCK.r).setDensity(m / vol).setFriction(this.scene.friction), ball);
+    // the rope: a ball joint at the pivot, the ball's centre KNOCK.len below it
+    const off = sub(pivot, b);
+    const joint = this.world.createImpulseJoint(RAPIER.JointData.spherical(V([0, 0, 0]), V(off)), fixed, ball, true);
+    this.pend = { fixed, ball, joint, pivot };
+    const e = this.pendEnergy();
+    this.e0 += e; this.mass += ball.mass();
+    this.knock.at = this.t;
+  }
+  pendEnergy() {
+    const b = this.pend.ball, v = b.linvel(), w = b.angvel(), m = b.mass();
+    return m * (0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + this.g * b.translation().y) + 0.5 * 0.4 * m * KNOCK.r ** 2 * (w.x * w.x + w.y * w.y + w.z * w.z);
+  }
+  // after one pass, the pendulum is taken away (and its energy off the books)
+  dropPendulum() {
+    this.e0 -= this.pendEnergy();
+    this.mass -= this.pend.ball.mass();
+    this.world.removeRigidBody(this.pend.ball);
+    this.world.removeRigidBody(this.pend.fixed);
+    this.pend = null;
+  }
+
   // what an eye sees as salient: the prize (ball, cube or barbell) or another creature's body
   salient(h, i) {
     if (this.cube && this.cube.handle === h) return true;
+    if (this.pend && this.pend.ball.handle === h) return true;
     return this.creatures.some((c, k) => k !== i && c.valid && c.bodies.some(b => b.handle === h));
   }
 
@@ -1154,9 +1277,56 @@ export class Sim {
       // upright walking: a fall is any part its template doesn't mark
       // `ground` touching the ground, settling included; it ends the walk
       if (task.kind === 'upright' && this.track[i].fell === undefined && c.parts.some((p, k) => c.onGround[k] && !TEMPLATES[c.genome.plan?.type]?.roles[c.genome.nodes[p.node].role]?.ground)) this.track[i].fell = this.t;
+      // walking with falls (scene falls), while measuring: a fall is a part
+      // other than the feet touching down (the template's ground parts, or
+      // else the parts on the ground when measuring started; all of a snake),
+      // the root tilting over FALL_TILT from its built uprightness, or the
+      // centre of mass dropping below FALL_LOW of its starting height. Parts
+      // already resting on the ground when measuring starts (a dragging
+      // abdomen, pincers) are posture, not a fall, and may stay down.
+      // A topple can carry a body forward before anything but feet lands, so
+      // on a fall the score rolls back FALL_BACK s, to before it began.
+      if (this.walkFalls && this.tStart !== null && this.t >= this.tStart && this.track[i].fell === undefined) {
+        const tr = this.track[i];
+        if (!tr.feet) {
+          tr.feet = this.feetOf(c);
+          // (a template's props, like a biped's tail, may not rest on the ground)
+          const roles = TEMPLATES[c.genome.plan?.type]?.roles;
+          tr.resting = new Set(c.parts.map((p, k) => (c.onGround[k] && !roles?.[c.genome.nodes[p.node].role]?.prop ? k : -1)).filter(k => k >= 0));
+          tr.h0 = c.com()[1] / c.standY;   // how tall it stands as measuring starts
+        }
+        const up = qrot(c.partPose(0).q, qrot(qconj(c.partQ[0]), [0, 1, 0]))[1];
+        const low = tr.y0 !== undefined && c.com()[1] < FALL_LOW * tr.y0;
+        // sliding: the slowest foot on the ground is the creature's anchor,
+        // and however far the anchor itself slides is subtracted. A planted
+        // foot (walking, shuffling) slides nowhere; when every foot skids, as
+        // when a creature swinging a heavy weight slides along, the skid
+        // doesn't count. Airborne phases count. Snakes are exempt:
+        // slithering is sliding.
+        if (c.genome.plan?.type !== 'snake') {
+          let anchor = null, slow = Infinity;
+          for (let k = 0; k < c.parts.length; k++) {
+            if (!c.onGround[k] || !tr.feet(k)) continue;
+            const b = c.partBody[k], v = add(c.bv[b], cross(c.bw[b], sub(c.partPose(k).c, c.bc[b])));
+            const sp = Math.hypot(v[0], v[2]);
+            if (sp < slow) { slow = sp; anchor = v; }
+          }
+          if (anchor) tr.slideOff = add(tr.slideOff || [0, 0, 0], [anchor[0] * DT, 0, anchor[2] * DT]);
+        }
+        if (up < Math.cos(TEMPLATES[c.genome.plan?.type]?.fallTilt ?? FALL_TILT) || low || (c.parts.some((p, k) => c.onGround[k] && !tr.feet(k) && !tr.resting.has(k)))) {
+          tr.fell = this.t;
+          if (tr.past?.length) Object.assign(tr, tr.past[0]);
+        }
+      }
       if (this.tStart !== null && this.t >= this.tStart) this.trackStep(i);
     }
     if (this.tStart === null) this.relaxStep();
+    // knocked down: the pendulum comes KNOCK.delay s into measuring and goes
+    // once it has swung through and out the far side (about 1.5 half-periods)
+    if (this.knock && this.tStart !== null) {
+      if (this.knock.at === null && this.t >= this.tStart + KNOCK.delay && this.creatures[0]?.valid) this.hangPendulum();
+      else if (this.pend && this.t >= this.knock.at + 1.5 * Math.PI * Math.sqrt(KNOCK.len / this.g)) this.dropPendulum();
+    }
     if (this.lift && this.tStart !== null && this.t >= this.tStart) this.liftStep();
     if (this.volley && this.tStart !== null && this.t >= this.tStart) this.volleyStep();
     // wrestling: how long the two are in contact
@@ -1247,6 +1417,7 @@ export class Sim {
   energy() {
     let e = 0;
     this.creatures.forEach(c => { if (c.valid) e += c.fullEnergy(this.g) + (this.surface ? c.buoyEnergy(this.scene.buoyancy, this.g) : 0); });
+    if (this.pend) e += this.pendEnergy();
     if (this.cube) {
       const v = this.cube.linvel(), w = this.cube.angvel(), m = this.cube.mass();
       e += m * (0.5 * (v.x * v.x + v.y * v.y + v.z * v.z) + this.g * this.cube.translation().y);
@@ -1272,6 +1443,8 @@ export class Sim {
     // (and below its height at the final-third mark) is subtracted from the
     // distance. A walker's COM bobs but doesn't fall, so it loses ~nothing.
     const y = c.com()[1];
+    // walking with falls: nothing after the fall counts, nor in the grace time
+    if (this.walkFalls && (tr.fell !== undefined || this.t > this.tStart + this.T + 1e-9)) return;
     if (task.env === 'land') {
       if (tr.y0 === undefined) tr.y0 = tr.minY = y;
       tr.minY = Math.min(tr.minY, y);
@@ -1280,10 +1453,25 @@ export class Sim {
     if (task.kind === 'speed') {
       let p = c.com();
       if (task.env !== 'water') p = [p[0], 0, p[2]];   // on land and at the surface, horizontal
+      if (tr.slideOff) p = sub(p, tr.slideOff);   // less any sliding
       if (!tr.start) tr.start = p;
       tr.maxDist = Math.max(tr.maxDist, len(sub(p, tr.start)));
       if (!tr.mark && elapsed >= this.T * 2 / 3) { tr.mark = p; tr.yMark = tr.minYMark = y; }
       tr.last = p;
+      if (this.walkFalls) this.keepPast(tr);
+    } else if (task.kind === 'stand') {
+      // standing: its height as a share of the built pose's (no more for
+      // jumping), each measured step until a fall
+      tr.hSum = (tr.hSum || 0) + Math.max(0, Math.min(1, y / c.standY));
+    } else if (task.kind === 'knock' && this.knock.at !== null) {
+      // knocked down: standing, as in getting up, from the strike on
+      const q = c.partPose(0).q, u = qrot(q, qrot(qconj(c.partQ[0]), [0, 1, 0]));
+      const roles = TEMPLATES[c.genome.plan?.type]?.roles;
+      const foot = k => (roles ? roles[c.genome.nodes[c.parts[k].node].role]?.ground : c.feet.has(k));
+      const down = c.parts.some((p, k) => c.onGround[k] && !foot(k));
+      const s = (1 + u[1]) / 2 * Math.max(0, Math.min(1, y / c.standY)) * (down ? 0.5 : 1);
+      tr.sum = (tr.sum || 0) + s; tr.n = (tr.n || 0) + 1;
+      if (elapsed >= this.T * 2 / 3) { tr.late = (tr.late || 0) + s; tr.nLate = (tr.nLate || 0) + 1; }
     } else if (task.kind === 'getup') {
       // standing: the root's uprightness, (1 + up) / 2 (on its back 0, on its
       // side 0.5, as built 1, so rolling over already counts) x the centre of
@@ -1299,11 +1487,13 @@ export class Sim {
       if (elapsed >= this.T * 2 / 3) { tr.late = (tr.late || 0) + s; tr.nLate = (tr.nLate || 0) + 1; }
     } else if (task.kind === 'upright') {
       if (tr.fell === undefined) {
-        const p = [c.com()[0], 0, c.com()[2]];
+        let p = [c.com()[0], 0, c.com()[2]];
+        if (tr.slideOff) p = sub(p, tr.slideOff);   // less any sliding
         if (!tr.start) tr.start = p;
         tr.maxDist = Math.max(tr.maxDist, len(sub(p, tr.start)));
-        if (!tr.mark && elapsed >= this.T * 2 / 3) tr.mark = p;
+        if (!tr.mark && elapsed >= this.T * 2 / 3) { tr.mark = p; if (this.walkFalls) tr.yMark = tr.minYMark = y; }
         tr.last = p;
+        if (this.walkFalls) this.keepPast(tr);
       }
     } else if (task.kind === 'jump') {
       // the lowest part's height counts only as far as the COM has also risen
@@ -1426,6 +1616,18 @@ export class Sim {
     return this.creatures.map((c, i) => {
       if (!c.valid || this.failed[i]) return 0;
       const tr = this.track[i];
+      if (task.kind === 'speed' && this.walkFalls) {
+        // up to the fall: Sims' distance terms less the centre of mass's
+        // drop (a topple nets about nothing), plus 0.1 x standing: half the
+        // share of the time it stayed up, half how tall it stood as measuring
+        // began (built height = 1), so even shuffling while standing is a
+        // start, and so is standing taller before collapsing
+        const T0 = this.tStart, up = tr.fell === undefined ? 1 : Math.min(1, Math.max(0, tr.fell - T0) / T);
+        const stand = 0.5 * up + 0.5 * Math.max(0, Math.min(1, tr.h0 || 0));
+        if (!tr.start) return (this.scene.standWeight ?? 0.1) * stand;
+        const drop = tr.y0 - tr.minY, dropLate = tr.yMark === undefined ? 0 : tr.yMark - tr.minYMark;
+        return Math.max(0, 0.5 * (tr.maxDist - drop) / T + 0.5 * (tr.mark ? Math.max(0, len(sub(tr.last, tr.mark)) - dropLate) : 0) / (T / 3)) + (this.scene.standWeight ?? 0.1) * stand;
+      }
       if (task.kind === 'speed') {
         if (!tr.start || !tr.mark) return 0;
         // Sims: straight movement rewarded via max distance from the start;
@@ -1438,13 +1640,24 @@ export class Sim {
         // as walking (Sims' max distance plus the final third's distance),
         // up to the fall; plus 0.1 x the share of the time it stayed up,
         // settling included, so that standing longer is a first step
-        const up = tr.fell === undefined ? 1 : tr.fell / (task.settle + T);
+        const up = tr.fell === undefined ? 1 : Math.min(1, tr.fell / (task.settle + T));
         if (!tr.start) return 0.1 * up;
+        if (this.walkFalls) {
+          // less the centre of mass's drop up to the fall, so a topple nets about nothing
+          const drop = tr.y0 === undefined ? 0 : tr.y0 - tr.minY, dropLate = tr.yMark === undefined ? 0 : tr.yMark - tr.minYMark;
+          return Math.max(0, 0.5 * (tr.maxDist - drop) / T + 0.5 * (tr.mark ? Math.max(0, len(sub(tr.last, tr.mark)) - dropLate) : 0) / (T / 3)) + 0.1 * up;
+        }
         return 0.5 * tr.maxDist / T + 0.5 * (tr.mark ? len(sub(tr.last, tr.mark)) : 0) / (T / 3) + 0.1 * up;
       }
       if (task.kind === 'jump') return Math.max(0, tr.maxLow);
+      // standing: half the share of the time it stayed up, half its average
+      // height over the whole time (nothing after a fall)
+      if (task.kind === 'stand') {
+        const steps = Math.round(T / DT), up = tr.fell === undefined ? 1 : Math.min(1, Math.max(0, tr.fell - this.tStart) / T);
+        return 0.5 * up + 0.5 * Math.min(1, (tr.hSum || 0) / steps);
+      }
       // getting up: standing over the last third, plus a quarter for the whole time
-      if (task.kind === 'getup') return tr.nLate ? 0.75 * tr.late / tr.nLate + 0.25 * tr.sum / tr.n : 0;
+      if (task.kind === 'getup' || task.kind === 'knock') return tr.nLate ? 0.75 * tr.late / tr.nLate + 0.25 * tr.sum / tr.n : 0;
       // stairs: half the COM's rise, half the lowest point's final height,
       // so standing up tall earns little and every part has to climb
       if (task.kind === 'climb') return tr.last === undefined ? 0 : Math.max(0, 0.5 * (tr.last - tr.y0) + 0.5 * Math.max(0, tr.low));
@@ -1463,21 +1676,33 @@ export class Sim {
 }
 
 // Run a full evaluation (all trials) and return fitness per genome.
+// opts.learn (keeping learned weights): the first creature's Hebbian weights
+// carry from each trial to the next, and the result is { fit, learned }, the
+// weights it ended with (brain.js learnedWeights), to write into its genome.
 export function evaluate(taskName, genomes, opts = {}) {
   const task = TASKS[taskName];
   // both sides: the same bout with the creatures in swapped order, each
   // creature's two scores averaged
   if (task.pair && genomes.length === 2 && sceneFor(taskName, opts.scene).bothSides) {
-    const a = evaluate(taskName, genomes, { ...opts, scene: { ...opts.scene, bothSides: false } });
-    const b = evaluate(taskName, [genomes[1], genomes[0]], { ...opts, scene: { ...opts.scene, bothSides: false } });
-    return [(a[0] + b[1]) / 2, (a[1] + b[0]) / 2];
+    const ra = evaluate(taskName, genomes, { ...opts, scene: { ...opts.scene, bothSides: false } });
+    const b = evaluate(taskName, [genomes[1], genomes[0]], { ...opts, learn: false, scene: { ...opts.scene, bothSides: false } });
+    const a = opts.learn ? ra.fit : ra;
+    const fit = [(a[0] + b[1]) / 2, (a[1] + b[0]) / 2];
+    return opts.learn ? { fit, learned: ra.learned } : fit;
   }
   const sum = genomes.map(() => 0);
+  let gs = genomes, learned = null;
   for (let trial = 0; trial < task.trials; trial++) {
-    const sim = new Sim(taskName, genomes, { ...opts, trial });
+    const sim = new Sim(taskName, gs, { ...opts, trial });
     while (!sim.done) sim.step();
     sim.fitness().forEach((f, i) => { sum[i] += f; });
+    const c = sim.creatures[0];
+    if (opts.learn && c?.valid && c.brain.plastic) {
+      learned = learnedWeights(c.brain);
+      gs = [applyLearned(JSON.parse(JSON.stringify(gs[0])), learned), ...gs.slice(1)];
+    }
     sim.free();
   }
-  return sum.map(s => s / task.trials);
+  const fit = sum.map(s => s / task.trials);
+  return opts.learn ? { fit, learned } : fit;
 }

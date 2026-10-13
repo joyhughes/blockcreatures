@@ -26,6 +26,7 @@ export function compileBrain(g, parts) {
   const gbase = N; N += g.globals.length;
 
   const fn = new Uint8Array(N), param = new Float64Array(N), eta = new Float64Array(N);
+  const origin = new Array(N);   // the gene each neuron copies: [node, neuron] or [-1, global]
   const inIdx = [], inW = [], inK = [];
   const nIn = new Uint8Array(N);
 
@@ -68,8 +69,8 @@ export function compileBrain(g, parts) {
       inIdx.push(ix); inW.push(ix === -2 ? 0 : inp.w); inK.push(kv);
     }
   }
-  parts.forEach((p, pi) => g.nodes[p.node].neurons.forEach((nr, j) => add(base[pi] + j, nr, pi)));
-  g.globals.forEach((nr, j) => add(gbase + j, nr, 0));
+  parts.forEach((p, pi) => g.nodes[p.node].neurons.forEach((nr, j) => { origin[base[pi] + j] = [p.node, j]; add(base[pi] + j, nr, pi); }));
+  g.globals.forEach((nr, j) => { origin[gbase + j] = [-1, j]; add(gbase + j, nr, 0); });
 
   // effectors: one per free DOF of each non-root joint
   const effectors = [];
@@ -84,7 +85,7 @@ export function compileBrain(g, parts) {
   });
 
   return {
-    S, N, fn, param, nIn, eta, plastic: eta.some(x => x !== 0), usesEyes, E0,
+    S, N, fn, param, nIn, eta, plastic: eta.some(x => x !== 0), usesEyes, E0, origin,
     inIdx: Int32Array.from(inIdx), inW: Float64Array.from(inW), inK: Float64Array.from(inK),
     vals: new Float64Array(S + N), next: new Float64Array(N), state: new Float64Array(N * 2),
     effectors, effOut: new Float64Array(effectors.length),
@@ -168,6 +169,32 @@ export function brainStep(b, dt) {
     const x = e.idx >= 0 ? vals[e.idx] * e.w : e.k * e.w;
     out[j] = x > 1 ? 1 : x < -1 ? -1 : x;
   }
+}
+
+// What a brain learned, in genome terms: for each plastic neuron gene, its
+// input weights now, averaged over the gene's copies (mirror twins, chain
+// segments). Inputs without a live source (constants) never learn and are
+// left out. -> [[node or -1 for a global, neuron, input, weight], ...]
+export function learnedWeights(b) {
+  const acc = new Map();
+  for (let k = 0; k < b.N; k++) {
+    if (b.eta[k] === 0) continue;
+    for (let j = 0; j < 3; j++) {
+      if (b.inIdx[k * 3 + j] < 0) continue;
+      const key = b.origin[k].join(',') + ',' + j, a = acc.get(key) || [0, 0];
+      a[0] += b.inW[k * 3 + j]; a[1]++;
+      acc.set(key, a);
+    }
+  }
+  return [...acc].map(([key, [sum, n]]) => [...key.split(',').map(Number), sum / n]);
+}
+// Write learned weights into a genome (the next life starts from them).
+export function applyLearned(g, learned) {
+  for (const [node, n, j, w] of learned) {
+    const nr = node < 0 ? g.globals[n] : g.nodes[node]?.neurons[n];
+    if (nr?.inputs[j]) nr.inputs[j].w = Math.max(-8, Math.min(8, w));
+  }
+  return g;
 }
 
 // Oscillator starting phase is taken from the neuron's param.

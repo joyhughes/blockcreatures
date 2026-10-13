@@ -17,7 +17,8 @@ export class Pool {
   done(w, msg) {
     const p = this.pending.get(msg.id);
     this.pending.delete(msg.id);
-    p.resolve(msg.fit);
+    // with learned weights (opts.learn): { fit, learned }; otherwise the fitness array
+    p.resolve(msg.learned ? { fit: msg.fit, learned: msg.learned } : msg.fit);
     this.idle.push(w);
     this.pump();
   }

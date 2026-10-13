@@ -5,10 +5,12 @@ import { initPhysics, evaluate } from './sim.js';
 const ready = initPhysics();
 const handle = async (job, reply) => {
   await ready;
-  let fit;
-  try { fit = evaluate(job.task, job.genomes, job.opts); }
-  catch (e) { fit = job.genomes.map(() => 0); }
-  reply({ id: job.id, fit });
+  let fit, learned = null;
+  try {
+    const r = evaluate(job.task, job.genomes, job.opts);
+    if (Array.isArray(r)) fit = r; else ({ fit, learned } = r);
+  } catch (e) { fit = job.genomes.map(() => 0); }
+  reply(learned ? { id: job.id, fit, learned } : { id: job.id, fit });
 };
 
 if (typeof self !== 'undefined' && typeof self.postMessage === 'function') {

@@ -19,6 +19,8 @@ evolved together, for the same evolutionary targets Sims used:
 | Stairs (beyond Sims) | land, a pit at the bottom of a square stepped amphitheatre (12 steps of 0.15 × 0.4 m) | metres climbed: ½ the centre of mass's rise + ½ the lowest part's final height |
 | Biped walking (beyond Sims) | land, the biped template | as walking, up to the first time any part but a foot or the tail touches the ground, + 0.1 × the share of the time it stayed up |
 | Quadruped walking (beyond Sims) | land, the quadruped template | as biped walking, falls being anything but the paws, toes or tail touching the ground |
+| Knocked down (beyond Sims) | land; one second in, a pendulum ball (2 × the creature's mass, 2.5 m rope, from 75°) swings in from a random direction and is taken away after one pass; two opposite directions per test, re-drawn each generation | standing, as in getting up, from the strike on: ¾ the last third's average, ¼ the whole time's |
+| Standing (beyond Sims) | land; walking's fall rules | half the share of the time it stays up, half its average height (a share of its built pose's) over the whole time |
 | Getting up (beyond Sims) | land; the creature starts lying on its side, on its back or sitting (Scene: *Start*) | how well it stands, 0–1: uprightness (on its back 0, on its side 0.5, as built 1) × centre-of-mass height as a share of the built pose's, halved while any part but its feet touches the ground (a template's feet, paws, toes and tail; otherwise the parts on the ground as built); ¾ the last third's average, ¼ the whole run's |
 | Lifting (beyond Sims) | land, a barbell (a 1.2 m bar between two square 0.4 m plates, 0.3 kg; the bar 0.2 m off the ground) beside the creature | the barbell's height off the ground averaged over the last second, + up to 0.2 for closing on it |
 
@@ -410,17 +412,111 @@ what surface swimmers did), passive *Damping*, and the reflexes' speeds.
 With each set hard (all three reflex minimums at 1, strength ×4, range 0.5,
 damping 0), random walkers kept passing the energy audit.
 
+## Joints, anatomy and falls
+
+**Joints held by the physics engine.** The joint limits used to be
+inelastic stops this project applied by hand, sized for the lightest case. A
+body's weight pushed legs up to 3 rad past them, and the champion insect's
+ball-jointed legs went right round, 126 times in one walk: it rolled on its
+joints. Now each joint is built in its own frame, so Rapier's axes are our
+twist and two bend axes, and Rapier holds the limits. In a stress test every
+joint type stayed within 0.05 rad. The Scene setting *Joints* chooses
+*limited* (the default), *rolling* (twist axes spin freely, like wheels and
+axles, with the bends still limited) or *old*. Saved runs and champions from
+before keep *old*, so they replay as they evolved. Under *limited*, the
+champion insect scores 0.01 instead of 0.44, without its rolling gait. One
+known gap: with three free axes at large combined angles (ball joints),
+Rapier's per-axis angles and ours part, so a loaded ball joint can sit past
+our limit by up to 1.5 rad. The anatomical templates below use no ball joints
+in limbs.
+
+**Anatomy** (animal templates):
+- hips, shoulders, necks, ankles and wrists bend two ways (universal joints,
+  no twist); knees and elbows only hinge (revolute);
+- snakes have two degrees of freedom at every joint;
+- bipeds and quadrupeds have a bendable trunk: a pelvis or hindquarters, a
+  spine of 1–4 two-way segments (a human torso to an otter) and a chest. For
+  a quadruped the spine grows forward from the hindquarters, so the chest,
+  forelegs and head keep the orientation the one-piece body had; for a biped
+  it grows up from the pelvis, and the chest's head and arms hang as before;
+- an insect's or crab's body is one solid piece (abdomen and tail fused);
+- an arachnid's abdomen moves on its own two-way joint and carries the tail;
+- every template has feet: paws, toes, feet and tails as before, lower legs
+  for insects, arachnids, crustaceans (claws too) and centipedes, and every
+  part of a snake.
+
+**Falls** (Scene: *Falls end a walk*, on for new runs; Walking, Standing,
+Biped and Quadruped walking): a walk ends when a new part other than the
+feet touches the ground (parts already resting on it when measuring starts,
+like a dragging abdomen, are posture), the root tilts more than 60° from its
+built uprightness (35° for bipeds: an upright walker's trunk shouldn't lean
+further), or the centre of mass drops below 60% of its starting height. A
+biped's tail is a prop, not a foot: one evolved to lean back slowly and sit
+on its tail, which counted its 0.5 m lean as walking. Nothing after a fall counts: the score is the time spent standing up
+to the fall, plus the speed only up to 2 seconds before it, so the topple
+itself never pays (a tall biped can lean for over a second before it passes
+60°; half a second, at first, wasn't enough). The simulation also runs 2
+seconds past the measured time: nothing then counts, but a fall still does,
+so a lunge or topple begun just before the end doesn't pay. Distances count
+net of the centre of mass's drop. The biped champion stood still for 9 s and
+fell over backwards in the last second, which was most of its score (0.28);
+under these rules it scores 0.12, nearly all for standing.
+
+**Friction** (Scene) is a coefficient between bodies and the ground; the
+default is now 2, grippy like rubber on a rough surface, so bodies can't skid
+around as easily and standing is easier. Runs from before keep 1.
+
+**Sliding isn't walking.** Each step, the slowest foot on the ground is the
+creature's anchor, and however far the anchor itself slides is subtracted
+from its progress. A planted foot slides nowhere, so walking and shuffling
+lose nothing; when every foot skids at once, as when a quadruped swinging a
+heavy weight on its trunk slid along sideways, the skid doesn't count.
+Airborne phases count, and snakes are exempt (slithering is sliding). Blades
+(fluke, trunk tip, dorsal fin) must also be flat: one of their two cross
+dimensions stays under 6 cm (evolution picks which, a fin or a fluke).
+Before, a "blade" could grow into a 0.45 m block, a weight to swing.
+
+**Knocked down** (target): "I get knocked down, but I get up again". The
+pendulum is aimed through the creature's centre of mass and arrives at about
+6 m/s; it's drawn as a ball on a rope, and eyes see it coming. Its energy is
+added to the energy audit when it's hung and taken off when it's removed. In
+tests it knocked over about 7 in 16 standing random quadrupeds and 3 in 16
+bipeds, and no insects (low and wide, they get shoved but don't tip), with no
+audit failures in 48 runs. Scene: *Pendulum mass*.
+
+**Standing first.** Walking adds a standing bonus, weighted by the Scene
+setting *Standing bonus* (0.1 by default): half the share of the time it
+stayed up, half how tall it stood as measuring began. Raise it to make
+standing pay first, then lower it as gaits appear; or evolve the
+**Standing** target first and seed a walking run from its champion with
+*Evolve from this*. Animal templates in new runs settle standing, reflexes
+on, as biped and quadruped walking always did, instead of Sims'
+relax-until-still. In tests on 12 random creatures of each plan under these
+rules, insects, arachnids and crustaceans stood 70–89% of the time and
+quadrupeds 52%; random bipeds all fell at once, and score by how tall they
+stood.
+
 ## Eyes, proprioception and a learning brain
 
-- **Eyes**: two on the head (the template's head part, else the root), one on
-  each side, drawn as white eyes with pupils. Each looks out and 45° forward
-  and is a retina of 5 × 3 rays covering 80° × 50° out to 5 m. Each pixel has
-  two channels: nearness (1 at the eye, 0 at range or nothing) and whether
-  the ray hit the prize or another creature. They're a bank of 60 inputs any
-  neuron can read (source `e`). A mirrored part reads the other eye, flipped,
-  so mirror twins see mirror images. Rays are cast only for brains that read
-  the eyes, and refresh at 30 Hz; with eyes a simulation costs about half as
-  much again.
+- **Eyes**: two on the head (the template's head part, else the root), drawn
+  as white eyes with pupils. Where they sit is an evolvable trait,
+  `genome.eyes.spread` (0–1): at 0 they're on the front of the head, gazing
+  10° off straight ahead; at 1 they're on the sides, gazing straight out.
+  Each eye is a retina of 5 × 3 rays covering 80° × 50° out to 5 m. Side
+  eyes see almost all round; front eyes overlap. The trade-off is depth:
+  - each eye alone (banks 0 and 1) sees whether something is there, with
+    only a coarse sense of distance (near, middle or far), and whether it's
+    the prize or another creature;
+  - the binocular bank (2) is a 5 × 3 grid looking straight ahead (50° ×
+    50°), wired from the overlap of the two fields. A pixel both eyes see
+    gets the true nearness (1 at the eyes, 0 at range) and the prize flag; a
+    pixel outside the overlap reads 0. Front eyes fill the whole grid, eyes
+    gazing 30° out fill its middle, and eyes gazing more than 40° out none.
+
+  That's 90 inputs any neuron can read (source `e`). A mirrored part reads
+  the other eye, and the binocular grid flipped left to right, so mirror
+  twins see mirror images. Rays are cast only for brains that read the eyes,
+  and refresh at 30 Hz.
 - **Proprioception** (sensors 23–28 on every part): each joint axis's
   turning rate, and its muscle's effort (the brain's torque as a share of
   the muscle's strength), alongside the joint angles (0–2).
@@ -430,6 +526,12 @@ damping 0), random walkers kept passing the energy audit.
   w): inputs that fire with it grow stronger, and the weights stay bounded.
   Only neurons that are firing learn, so in random brains most synapses stay
   put.
+- **Keep learned weights** (Evolution panel; `LAMARCK=1` for the command
+  line): what a brain's Hebbian synapses learn carries from each trial to the
+  next, and is written back into its genome after the test (averaged over a
+  gene's copies), so survivors keep it and offspring inherit it. That's
+  Lamarckian inheritance. Off, every life starts from the weights it was born
+  with.
 - **A bigger brain**: up to 8 neurons per part (was 4) and 16 global neurons
   (was 4), room for a central network that the eyes and body senses feed.
 

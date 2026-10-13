@@ -10,6 +10,7 @@
 //      SCENE=<json> scene overrides (sim.js SCENE), LEGACY=1 the old cube scene,
 //      TEAMS=2 competition between two species, each against the other's best
 //      (team B's history goes in the run file as rivalHistory),
+//      LAMARCK=1 keep learned weights (Hebbian weights written back into genomes),
 //      TEAM_B=<plan> two teams with team B in another body plan (implies TEAMS=2),
 //      RESUME=<run file> continue that run (same arguments) up to [generations]:
 //      from its saved population, or for files saved before populations
@@ -30,9 +31,9 @@ const minArm = env('MIN_ARM', 0), islands = env('ISLANDS', 6), novelty = env('NO
 const parsePlan = a => { const r = /^radial(\d+)$/.exec(a); return r ? { type: 'radial', n: +r[1] } : { type: a }; };
 const body = { plan: parsePlan(planArg), round: roundArg === 'round', minArm };
 const planB = process.env.TEAM_B && process.env.TEAM_B !== planArg ? process.env.TEAM_B : '';
-const teams = planB ? 2 : env('TEAMS', 1);
+const teams = planB ? 2 : env('TEAMS', 1), lamarck = !!env('LAMARCK', 0);
 const bodyB = planB ? { ...body, plan: parsePlan(planB) } : null;
-const tag = `${task}-${seed}${planArg !== 'free' ? '-' + planArg : ''}${body.round ? '-round' : ''}${minArm ? '-arm' + minArm : ''}${islands > 1 ? '-isl' + islands : ''}${novelty ? '-nov' + novelty : ''}${structural ? '-st' + structural : ''}${teams === 2 ? '-teams' : ''}${planB ? '-vs-' + planB : ''}${process.env.SEED_FROM ? '-seeded' : ''}`;
+const tag = `${task}-${seed}${planArg !== 'free' ? '-' + planArg : ''}${body.round ? '-round' : ''}${minArm ? '-arm' + minArm : ''}${islands > 1 ? '-isl' + islands : ''}${novelty ? '-nov' + novelty : ''}${structural ? '-st' + structural : ''}${teams === 2 ? '-teams' : ''}${planB ? '-vs-' + planB : ''}${lamarck ? '-lam' : ''}${process.env.SEED_FROM ? '-seeded' : ''}`;
 const n = Math.max(1, cpus().length - 1);
 const pool = new Pool(onMsg => {
   const w = new Worker(new URL('../src/worker.js', import.meta.url));
@@ -42,7 +43,7 @@ const pool = new Pool(onMsg => {
 // SCENE='{"gap":3,"duration":15}' overrides scene parameters (sim.js SCENE); LEGACY=1 uses the old cube scene
 // the target's default scene, as the app starts a run (its own ball and lifespan)
 const scene = process.env.LEGACY ? null : { ...defaultScene(task), ...JSON.parse(process.env.SCENE || '{}') };
-const ev = new Evolver({ task, popSize: +pop, seed: +seed, evaluate: jobs => pool.run(jobs), body, bodyB, islands, novelty, structural, migrate, scene, teams });
+const ev = new Evolver({ task, popSize: +pop, seed: +seed, evaluate: jobs => pool.run(jobs), body, bodyB, islands, novelty, structural, migrate, scene, teams, lamarck });
 // SEED_FROM=<file with a .genome> starts from mutants of that creature
 const resume = process.env.RESUME && JSON.parse(readFileSync(process.env.RESUME));
 if (resume) {
@@ -67,7 +68,7 @@ for (let i = ev.gen; i < +gens; i++) {
   const h = await ev.step();
   const parts = h.genome.nodes.length;
   console.log(`gen ${h.gen} best ${h.best.toFixed(4)} mean ${h.mean.toFixed(4)} median ${h.median.toFixed(4)} nodes ${parts} founders ${h.founders} diversity ${h.diversity.toFixed(3)} spread ${h.islandSpread.toFixed(3)}${h.islands.length > 1 ? ' islands ' + h.islands.map(f => f.toFixed(2)).join(' ') : ''}${ev.rival ? ` | team B best ${h.rivalBest.toFixed(4)} mean ${h.rivalMean.toFixed(4)}` : ''} ${((Date.now() - t0) / 1000).toFixed(0)}s`);
-  writeFileSync(process.env.RESUME || `runs/${tag}.json`, JSON.stringify({ task, seed: +seed, body, islands, novelty, structural, migrate, scene, teams, bodyB, history: ev.history, rivalHistory: ev.rival?.history,
+  writeFileSync(process.env.RESUME || `runs/${tag}.json`, JSON.stringify({ task, seed: +seed, body, islands, novelty, structural, migrate, scene, teams, bodyB, lamarck, history: ev.history, rivalHistory: ev.rival?.history,
     pop: ev.pop.map(p => ({ g: p.g, isl: p.isl, founder: p.founder })), rivalPop: ev.rival?.pop.map(p => ({ g: p.g, isl: p.isl, founder: p.founder })) }));
 }
 process.exit(0);

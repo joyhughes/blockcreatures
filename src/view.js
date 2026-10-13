@@ -91,6 +91,7 @@ export class View {
     this.cubeGeo = new THREE.BoxGeometry(2, 2, 2);
     this.cubeMat = new THREE.MeshStandardMaterial({ color: 0x2b9b4a, roughness: 0.5 });
     this.ballGeo = new THREE.SphereGeometry(1, 32, 24);
+    this.ropeMat = new THREE.LineBasicMaterial({ color: 0x333333 });
     const bc = document.createElement('canvas');
     bc.width = 256; bc.height = 128;
     const bg = bc.getContext('2d');
@@ -393,6 +394,28 @@ export class View {
         const t = sim.cube.translation(), r = sim.cube.rotation();
         cell.cube.position.set(t.x + off.x, t.y + off.y, t.z + off.z);
         cell.cube.quaternion.set(r.x, r.y, r.z, r.w);
+      }
+      // knocked down: the pendulum, a ball on a rope, while it hangs
+      if (sim.pend && !cell.pend) {
+        const ball = new THREE.Mesh(this.ballGeo, this.ballMat);
+        ball.scale.setScalar(sim.pend.ball.collider(0).radius());
+        ball.castShadow = true;
+        const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+        this.owned.push(geo);
+        const rope = new THREE.Line(geo, this.ropeMat);
+        rope.frustumCulled = false;
+        this.add(ball); this.add(rope);
+        cell.pend = { ball, rope };
+      }
+      if (cell.pend) {
+        cell.pend.ball.visible = cell.pend.rope.visible = !!sim.pend;
+        if (sim.pend) {
+          const t = sim.pend.ball.translation(), p = sim.pend.pivot;
+          cell.pend.ball.position.set(t.x + off.x, t.y + off.y, t.z + off.z);
+          const pos = cell.pend.rope.geometry.attributes.position;
+          pos.setXYZ(0, p[0] + off.x, p[1] + off.y, p[2] + off.z); pos.setXYZ(1, t.x + off.x, t.y + off.y, t.z + off.z);
+          pos.needsUpdate = true;
+        }
       }
       if (cell.label) {
         const c0 = sim.creatures.find(c => c.valid);

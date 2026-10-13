@@ -6,7 +6,7 @@ import { makeRng } from './math.js';
 import { Recorder } from './record.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -53,7 +53,7 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', buoyancy: 'scBuoyancy', start: 'scStart',
   strength: 'scStrength', toneMin: 'scToneMin', levelMin: 'scLevelMin', braceMin: 'scBraceMin',
-  jointRange: 'scJointRange', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
+  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
   grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether',
   stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing', engage: 'scEngage', bothSides: 'scBothSides' };
@@ -158,7 +158,7 @@ function newRun() {
     task, popSize: +$('pop').value, seed: +$('seed').value,
     evaluate: jobs => pool.run(jobs), body: body(), bodyB: bodyB(), islands: +$('islands').value,
     novelty: +$('novelty').value, structural: +$('structural').value, migrate: +$('migrate').value,
-    scene: readScene(), teams: +$('teams').value,
+    scene: readScene(), teams: +$('teams').value, lamarck: $('lamarck').checked,
   });
   runs.set(runKey(), evolver);
   showScene();
@@ -175,6 +175,7 @@ function switchRun() {
   $('islands').value = String(r.islands);
   $('teams').value = String(r.teams);
   $('novelty').value = String(r.novelty); $('structural').value = String(r.structural); $('migrate').value = String(r.migrate);
+  $('lamarck').checked = !!r.lamarck;
   writeScene(r.scene);
   selected = -1; pendingGen = -1;
   $('gens').innerHTML = '';
@@ -192,7 +193,7 @@ async function evolveLoop() {
   evalT0 = performance.now(); evalCount = 0;
   while (running) {
     const before = evolver.pop.filter(p => p.fit === null).length;
-    const varying = TASKS[task].kind === 'follow' || !!TASKS[task].pair;
+    const varying = TASKS[task].kind === 'follow' || TASKS[task].kind === 'knock' || !!TASKS[task].pair;
     const h = await evolver.step();
     const sides = TASKS[task].pair && sceneFor(task, evolver.scene).bothSides ? 2 : 1;
     evalCount += (varying ? evolver.popSize * TASKS[task].trials : before) * evolver.teams * sides;
@@ -228,6 +229,7 @@ $('teams').onchange = $('planB').onchange = () => {
 };
 // these can change during a run; they apply from the next generation
 for (const id of ['novelty', 'structural', 'migrate']) $(id).onchange = () => { evolver[id] = +$(id).value; };
+$('lamarck').onchange = () => { evolver.lamarck = $('lamarck').checked; };
 
 // ---------------------------------------------------------------- replay
 function startReplay(r) {
@@ -657,7 +659,7 @@ $('save').onclick = () => {
     task, seed: evolver.rng && +$('seed').value, popSize: evolver.popSize, gen: evolver.gen,
     history: evolver.history, pop: evolver.pop.map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder })), opponent: evolver.opponent,
     body: evolver.body, bodyB: evolver.rival && evolver.rival.body !== evolver.body ? evolver.rival.body : null, islands: evolver.islands, novelty: evolver.novelty, structural: evolver.structural, migrate: evolver.migrate,
-    scene: evolver.scene, teams: evolver.teams, champ: evolver.champ,
+    scene: evolver.scene, teams: evolver.teams, champ: evolver.champ, lamarck: evolver.lamarck,
     rival: evolver.rival && { history: evolver.rival.history, gen: evolver.rival.gen, champ: evolver.rival.champ, opponent: evolver.rival.opponent,
       pop: evolver.rival.pop.map(p => ({ g: p.g, fit: p.fit, isl: p.isl, founder: p.founder })) },
   }));
@@ -692,6 +694,7 @@ function loadRun(d, name) {
   $('teams').value = String(d.teams || 1);
   $('planB').value = d.bodyB?.plan.type || '';
   $('novelty').value = String(d.novelty ?? 0); $('structural').value = String(d.structural ?? 0); $('migrate').value = String(d.migrate ?? 10);
+  $('lamarck').checked = !!d.lamarck;
   showPlan();
   newRun();
   evolver.scene = d.scene ?? null;   // saves from before scenes: the legacy scene

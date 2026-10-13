@@ -1,5 +1,25 @@
 [
  {
+  "file": "getUp-73-quadruped-isl6-nov0.3-st0.25.json",
+  "mtime": 1791859360.106861,
+  "size": 13166262
+ },
+ {
+  "file": "getUp-74-quadruped-isl6-nov0.3-st0.25.json",
+  "mtime": 1791859342.5226676,
+  "size": 13516860
+ },
+ {
+  "file": "getUp-72-biped-isl6-nov0.3-st0.25.json",
+  "mtime": 1791858364.9812753,
+  "size": 7182703
+ },
+ {
+  "file": "getUp-71-biped-isl6-nov0.3-st0.25.json",
+  "mtime": 1791857781.6950233,
+  "size": 7039478
+ },
+ {
   "file": "walk-65-centipede-isl6-nov0.3-st0.25.json",
   "mtime": 1791834652.6356657,
   "size": 6115446
