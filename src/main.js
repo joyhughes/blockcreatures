@@ -725,7 +725,8 @@ function loadRun(d, name) {
 const ago = s => (s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 129600 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago');
 async function listRuns() {
   try {
-    const list = await (await fetch('runs/index.json')).json();
+    // revalidate: GitHub Pages lets browsers keep it 10 minutes, hiding new runs
+    const list = await (await fetch('runs/index.json', { cache: 'no-cache' })).json();
     const now = Date.now() / 1000, sel = $('runs');
     sel.length = 1;
     for (const r of list) {
