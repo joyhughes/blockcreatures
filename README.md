@@ -401,6 +401,41 @@ random quadrupeds settle pitched onto their head or rump because their legs
 grew to different lengths. Evolution has to find bodies and brains that
 balance. Genomes from before reflexes have none and replay unchanged.
 
+**Muscles and joints** (Scene panel, every creature, old ones included; the
+defaults are the usual values): *Strength* ×, minimum *Tone*, *Level* and
+*Brace* for every joint (raise them to stiffen any creature, whatever its
+genes say), *Joint range* (every limit cut to within this many radians of the
+built angle; small ranges stop legs circling like paddlewheels, which is
+what surface swimmers did), passive *Damping*, and the reflexes' speeds.
+With each set hard (all three reflex minimums at 1, strength ×4, range 0.5,
+damping 0), random walkers kept passing the energy audit.
+
+## Eyes, proprioception and a learning brain
+
+- **Eyes**: two on the head (the template's head part, else the root), one on
+  each side, drawn as white eyes with pupils. Each looks out and 45° forward
+  and is a retina of 5 × 3 rays covering 80° × 50° out to 5 m. Each pixel has
+  two channels: nearness (1 at the eye, 0 at range or nothing) and whether
+  the ray hit the prize or another creature. They're a bank of 60 inputs any
+  neuron can read (source `e`). A mirrored part reads the other eye, flipped,
+  so mirror twins see mirror images. Rays are cast only for brains that read
+  the eyes, and refresh at 30 Hz; with eyes a simulation costs about half as
+  much again.
+- **Proprioception** (sensors 23–28 on every part): each joint axis's
+  turning rate, and its muscle's effort (the brain's torque as a share of
+  the muscle's strength), alongside the joint angles (0–2).
+- **Hebbian learning**: a neuron can have a learning rate (gene `hebb`, about
+  30% of new neurons, negative = anti-Hebbian). Its input weights then change
+  during the creature's life by Oja's rule, dw = rate × post × (pre − post ×
+  w): inputs that fire with it grow stronger, and the weights stay bounded.
+  Only neurons that are firing learn, so in random brains most synapses stay
+  put.
+- **A bigger brain**: up to 8 neurons per part (was 4) and 16 global neurons
+  (was 4), room for a central network that the eyes and body senses feed.
+
+Old genomes have none of these and replay unchanged (all 24 champions
+checked).
+
 **Getting up** (target): the creature starts lying on its side, on its back
 or sitting, pitched back 60° with its rump down (Scene: *Start*), and has to
 stand and stay standing. Its reflexes already pull toward the standing pose,

@@ -40,7 +40,23 @@ export const FN_NAMES = Object.keys(NEURON_FNS);
 // 17-19 balance: the direction of up in the part's frame (a level part reads
 // 0, 1, 0), 20-22 its spin about its own axes (rad/s). Mirrored parts read
 // both mirrored, like the photosensors, so twins sense alike.
-export const NSENS = 23;
+// 23-25 proprioception: each joint axis's turning rate (rad/s), 26-28 its
+// muscle's effort, the brain's torque as a share of the muscle's strength.
+export const NSENS = 29;
+// Eyes: two on the head (the template's head part, else the root), one on
+// each side, looking out and 45 degrees forward. Each is a retina of EYE_H x
+// EYE_V rays (80 x 50 degrees) seeing EYE_RANGE m, and each pixel has two
+// channels: nearness (1 at the eye, 0 at range or nothing) and whether the
+// ray hit the prize or another creature. Neurons read them as source
+// { t: 'e', i }, i = eyeIndex(eye, h, v, channel); a mirrored part reads the
+// other eye, flipped, so mirror twins see mirror images.
+export const EYE_H = 5, EYE_V = 3, EYE_CH = 2, EYE_RANGE = 5;
+export const NEYE = 2 * EYE_H * EYE_V * EYE_CH;
+export const eyeIndex = (eye, h, v, ch) => ((eye * EYE_V + v) * EYE_H + h) * EYE_CH + ch;
+export const mirrorEye = i => {
+  const ch = i % EYE_CH, h = Math.floor(i / EYE_CH) % EYE_H, v = Math.floor(i / (EYE_CH * EYE_H)) % EYE_V, eye = Math.floor(i / (EYE_CH * EYE_H * EYE_V));
+  return eyeIndex(1 - eye, EYE_H - 1 - h, v, ch);
+};
 // Reflexes: fixed feedback loops at each joint, with evolvable gains 0..1
 // (node.reflex = [tone, level, brace]; absent = all 0, as before reflexes):
 //   tone   stretch reflex: pulls the joint back toward its built angle
@@ -61,8 +77,8 @@ export const LIMITS = {
   maxParts: 20,              // free plan: development is truncated here
   maxPartsSym: 64,           // symmetric plans: more parts make the creature invalid (8 arms × 7 + body)
   maxNodes: 12,
-  maxNeurons: 4,             // per node
-  maxGlobals: 4,
+  maxNeurons: 8,             // per node (was 4)
+  maxGlobals: 16,            // (was 4): room for a central network the eyes feed
 };
 
 // ---------------------------------------------------------------- random
@@ -72,12 +88,14 @@ function randSrc(rng, kind) {
   // 'effector' same as part.
   const r = rng();
   if (kind === 'global') {
-    if (r < 0.3) return { t: 'g', i: rng.int(LIMITS.maxGlobals) };
-    if (r < 0.5) return { t: 'rs', i: rng.int(NSENS) };
-    if (r < 0.7) return { t: 'rn', i: rng.int(LIMITS.maxNeurons) };
+    if (r < 0.25) return { t: 'g', i: rng.int(LIMITS.maxGlobals) };
+    if (r < 0.45) return { t: 'e', i: rng.int(NEYE) };
+    if (r < 0.6) return { t: 'rs', i: rng.int(NSENS) };
+    if (r < 0.75) return { t: 'rn', i: rng.int(LIMITS.maxNeurons) };
     return { t: 'k', v: rng.range(-1, 1) };
   }
-  if (r < 0.28) return { t: 's', i: rng.int(NSENS) };
+  if (r < 0.24) return { t: 's', i: rng.int(NSENS) };
+  if (r < 0.3) return { t: 'e', i: rng.int(NEYE) };
   if (r < 0.55) return { t: 'n', i: rng.int(LIMITS.maxNeurons) };
   if (r < 0.65) return { t: 'p', i: rng.int(LIMITS.maxNeurons) };
   if (r < 0.73) return { t: 'c', c: rng.int(3), i: rng.int(LIMITS.maxNeurons) };
@@ -93,7 +111,8 @@ export function randNeuron(rng, kind = 'part') {
   // oscillators are what get anything moving at first, so favour them a bit
   const fn = rng.chance(0.3) ? rng.pick(['oscWave', 'oscSaw', 'oscWave']) : rng.pick(FN_NAMES);
   const n = NEURON_FNS[fn];
-  return { fn, p: rng.range(-1, 1), inputs: Array.from({ length: n }, () => randInput(rng, kind)) };
+  // hebb: learning rate of its input synapses (0 = fixed weights; < 0 anti-Hebbian)
+  return { fn, p: rng.range(-1, 1), inputs: Array.from({ length: n }, () => randInput(rng, kind)), hebb: rng.chance(0.3) ? rng.range(-1, 1) : 0 };
 }
 
 function randLimits(rng) {
@@ -154,7 +173,7 @@ export function randomGenome(rng, opts) {
   }
   const g = {
     nodes,
-    globals: Array.from({ length: rng.int(3) }, () => randNeuron(rng, 'global')),
+    globals: Array.from({ length: 2 + rng.int(5) }, () => randNeuron(rng, 'global')),
   };
   if (opts?.plan && opts.plan.type !== 'free') g.plan = { ...opts.plan };
   return g;
@@ -484,7 +503,7 @@ function mutateSrc(rng, src, kind) {
   if (rng.chance(0.4)) return randSrc(rng, kind);
   const s = { ...src };
   if (s.t === 'k') s.v = clamp(s.v + rng.gauss() * 0.4, -2, 2);
-  else if (s.i !== undefined) s.i = rng.chance(0.5) ? rng.int(s.t === 's' || s.t === 'rs' ? NSENS : LIMITS.maxNeurons) : s.i;
+  else if (s.i !== undefined) s.i = rng.chance(0.5) ? rng.int(s.t === 's' || s.t === 'rs' ? NSENS : s.t === 'e' ? NEYE : LIMITS.maxNeurons) : s.i;
   return s;
 }
 
@@ -505,6 +524,7 @@ function mutateNeuron(rng, nr, rate, kind) {
     n++;
   }
   if (rng.chance(rate)) { nr.p = clamp(nr.p + rng.gauss() * 0.4, -2, 2); n++; }
+  if (rng.chance(rate)) { nr.hebb = clamp((nr.hebb || 0) + rng.gauss() * 0.4, -2, 2); n++; }
   for (const inp of nr.inputs) n += mutateInput(rng, inp, rate, kind);
   return n;
 }
@@ -1006,7 +1026,7 @@ function templateGenome(rng, opts) {
     if (nd.recur > 1 && rng.chance(0.5)) addWave(nd, rng);
     return nd;
   });
-  const g = { nodes, globals: Array.from({ length: rng.int(3) }, () => randNeuron(rng, 'global')), plan: { ...opts.plan } };
+  const g = { nodes, globals: Array.from({ length: 2 + rng.int(5) }, () => randNeuron(rng, 'global')), plan: { ...opts.plan } };
   return conform(g);
 }
 

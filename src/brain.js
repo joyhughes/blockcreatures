@@ -3,8 +3,14 @@
 // children's neurons and the global neurons, then flattened into arrays.
 // All neurons update in parallel from the previous values; the brain runs two
 // steps per physics step, as in Sims' system.
+//
+// Values: [each part's NSENS sensors | the eyes' NEYE pixels | neurons].
+// Hebbian plasticity: a neuron with a learning rate (nr.hebb) changes its
+// input weights during the creature's life by Oja's rule, dw = rate * post *
+// (pre - post * w): inputs that fire with it grow stronger, and the weights
+// stay bounded. Without one the weights are fixed, as before.
 
-import { NSENS, JOINT_DOFS } from './genome.js';
+import { NSENS, NEYE, JOINT_DOFS, mirrorEye } from './genome.js';
 
 const FN_IDS = {};
 ['sum', 'product', 'divide', 'sumThreshold', 'greaterThan', 'signOf', 'min', 'max', 'abs', 'if',
@@ -12,13 +18,14 @@ const FN_IDS = {};
   'smooth', 'memory', 'oscWave', 'oscSaw'].forEach((n, i) => { FN_IDS[n] = i; });
 
 export function compileBrain(g, parts) {
-  const S = parts.length * NSENS;
+  const S = parts.length * NSENS + NEYE, E0 = parts.length * NSENS;
+  let usesEyes = false;
   const base = [];            // first neuron index of each part
   let N = 0;
   for (const p of parts) { base.push(N); N += g.nodes[p.node].neurons.length; }
   const gbase = N; N += g.globals.length;
 
-  const fn = new Uint8Array(N), param = new Float64Array(N);
+  const fn = new Uint8Array(N), param = new Float64Array(N), eta = new Float64Array(N);
   const inIdx = [], inW = [], inK = [];
   const nIn = new Uint8Array(N);
 
@@ -33,6 +40,7 @@ export function compileBrain(g, parts) {
     };
     switch (src.t) {
       case 's': return [part * NSENS + src.i, 0];
+      case 'e': usesEyes = true; return [E0 + ((parts[part]?.d ?? 1) < 0 ? mirrorEye(src.i % NEYE) : src.i % NEYE), 0];
       case 'rs': return [src.i, 0];
       case 'n': return [neuronOf(part, src.i), 0];
       case 'rn': return [neuronOf(0, src.i), 0];
@@ -51,6 +59,7 @@ export function compileBrain(g, parts) {
   function add(k, nr, part) {
     fn[k] = FN_IDS[nr.fn];
     param[k] = nr.p;
+    eta[k] = nr.hebb || 0;
     nIn[k] = nr.inputs.length;
     for (let j = 0; j < 3; j++) {
       const inp = nr.inputs[j];
@@ -75,7 +84,7 @@ export function compileBrain(g, parts) {
   });
 
   return {
-    S, N, fn, param, nIn,
+    S, N, fn, param, nIn, eta, plastic: eta.some(x => x !== 0), usesEyes, E0,
     inIdx: Int32Array.from(inIdx), inW: Float64Array.from(inW), inK: Float64Array.from(inK),
     vals: new Float64Array(S + N), next: new Float64Array(N), state: new Float64Array(N * 2),
     effectors, effOut: new Float64Array(effectors.length),
@@ -136,6 +145,21 @@ export function brainStep(b, dt) {
       }
     }
     next[k] = lim(y);
+  }
+  // Hebbian learning: each plastic neuron's input weights, from this step's
+  // inputs (the previous values) and its new output
+  if (b.plastic) {
+    const { eta } = b;
+    for (let k = 0; k < N; k++) {
+      if (eta[k] === 0) continue;
+      const post = next[k], r = eta[k] * dt;
+      for (let j = 0; j < 3; j++) {
+        const o = k * 3 + j, ix = inIdx[o];
+        if (ix < 0) continue;
+        const w = inW[o] + r * post * (vals[ix] - post * inW[o]);
+        inW[o] = w > 8 ? 8 : w < -8 ? -8 : (w === w ? w : 0);
+      }
+    }
   }
   vals.set(next, S);
   const eff = b.effectors, out = b.effOut;

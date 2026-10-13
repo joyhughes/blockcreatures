@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+const add3 = (a, d, k) => [a[0] + d[0] * k, a[1] + d[1] * k, a[2] + d[2] * k];
 const PALETTE = [0xe8b04a, 0x4fa3d9, 0xd9534f, 0x6cbf6a, 0xb07ad9, 0xe07a3f, 0x4fc1b8, 0xd96fa3, 0x9aa64a, 0x7a8cd9, 0xc9a27a, 0x5f9e8f];
 const OPPONENT = [0x8a8f99, 0x6d727c, 0xa3a8b0];
 
@@ -111,6 +112,10 @@ export class View {
     this.meshes = [];
     this.cells = [];
     this.boxGeo = new THREE.BoxGeometry(1, 1, 1);
+    this.eyeGeo = new THREE.SphereGeometry(1, 16, 12);
+    this.eyeMat = new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.3 });
+    this.pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
+    this.tmpV = new THREE.Vector3();
     this.edgeGeo = new THREE.EdgesGeometry(this.boxGeo);
     this.focus = new THREE.Vector3();
     this.labels = true;
@@ -140,7 +145,7 @@ export class View {
   }
 
   clear() {
-    for (const m of this.meshes) { this.scene.remove(m); m.material.dispose(); }
+    for (const m of this.meshes) { this.scene.remove(m); if (!m.userData.eye) m.material.dispose(); }   // eyes share theirs
     // extras: clones of the light and cube share their materials; labels own theirs
     for (const o of this.extras || []) { this.scene.remove(o); if (o.userData.own) { o.material.map.dispose(); o.material.dispose(); } }
     for (const g of this.owned || []) g.dispose();
@@ -312,6 +317,17 @@ export class View {
         this.meshes.push(mesh);
         cell.meshes.push(mesh);
       });
+      // eyes: a white ball set into each side of the head, its pupil on the gaze
+      for (const eye of c.eyes || []) {
+        for (const [r, at, mat] of [[eye.r, eye.pos, this.eyeMat], [eye.r * 0.55, add3(eye.pos, eye.gaze, eye.r * 0.6), this.pupilMat]]) {
+          const mesh = new THREE.Mesh(this.eyeGeo, mat);
+          mesh.scale.setScalar(r);
+          mesh.userData = { creature: ci, part: eye.part, local: at, eye: true };
+          this.scene.add(mesh);
+          this.meshes.push(mesh);
+          cell.meshes.push(mesh);
+        }
+      }
     });
   }
 
@@ -367,10 +383,11 @@ export class View {
     for (const cell of this.cells) {
       const { sim, off } = cell;
       for (const m of cell.meshes) {
-        const { creature, part } = m.userData;
+        const { creature, part, local } = m.userData;
         const { c, q } = sim.creatures[creature].partPose(part);
-        m.position.set(c[0] + off.x, c[1] + off.y, c[2] + off.z);
         m.quaternion.set(q.x, q.y, q.z, q.w);
+        m.position.set(c[0] + off.x, c[1] + off.y, c[2] + off.z);
+        if (local) m.position.add(this.tmpV.fromArray(local).applyQuaternion(m.quaternion));
       }
       if (cell.cube) {
         const t = sim.cube.translation(), r = sim.cube.rotation();

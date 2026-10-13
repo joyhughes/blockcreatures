@@ -205,6 +205,19 @@
     <label title="Depth of each step's tread">Step depth <input type="number" id="scStepDepth" min="0.1" max="3" step="0.05"> m</label>
     <label title="Number of steps up from the pit">Steps <input type="number" id="scSteps" min="1" max="40" step="1"></label>
   </div>
+  <p class="note" style="margin:10px 0 4px"><b>Muscles and joints</b> (every creature; the defaults are this project's usual values)</p>
+  <div class="row">
+    <label title="Muscle strength, a multiple of the usual. Torque scales with the thinner part's cross-section to the 1.5 power, so thin legs are weak">Strength <input type="number" id="scStrength" min="0.25" max="8" step="0.25"> ×</label>
+    <label title="Every joint's tone reflex is at least this (0–1): it holds the joint near its built angle. Raise it to stiffen floppy creatures, old ones included">Tone ≥ <input type="number" id="scToneMin" min="0" max="1" step="0.1"></label>
+    <label title="Every joint's level reflex is at least this (0–1): each part keeps its built orientation to gravity, so heads hold their view">Level ≥ <input type="number" id="scLevelMin" min="0" max="1" step="0.1"></label>
+    <label title="Every joint's brace reflex is at least this (0–1): each joint rights the part it hangs from, so legs hold the body up">Brace ≥ <input type="number" id="scBraceMin" min="0" max="1" step="0.1"></label>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <label title="Joint limits: every joint can turn at most this far from its built angle, each way (1.6 = the usual). Small ranges stop legs circling like paddlewheels">Joint range <input type="number" id="scJointRange" min="0.1" max="1.6" step="0.1"> rad</label>
+    <label title="Passive damping in every joint (the usual is 3)">Damping <input type="number" id="scJointDamp" min="0" max="20" step="0.5"></label>
+    <label title="How fast the tone reflex turns a joint back to its built angle, per radian it's off">Tone speed <input type="number" id="scToneRate" min="0" max="30" step="1"> /s</label>
+    <label title="How fast the level and brace reflexes turn a part back to its built orientation, per radian it's off">Level speed <input type="number" id="scReflexRate" min="0" max="30" step="1"> /s</label>
+  </div>
   <div class="row" style="margin-top:8px"><button id="scReset" title="Restore the default scene">Default scene</button></div>
   <p class="note" id="sceneNote"></p>
 

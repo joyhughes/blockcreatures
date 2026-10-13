@@ -10,7 +10,7 @@
 // here rather than by the engine, as in Sims' system.
 
 import RAPIER from './rapier.js';
-import { develop, interpenetrates, tooBig, bounds, JOINT_DOFS, NSENS, TEMPLATES } from './genome.js';
+import { develop, interpenetrates, tooBig, bounds, JOINT_DOFS, NSENS, NEYE, EYE_H, EYE_V, EYE_CH, EYE_RANGE, eyeIndex, TEMPLATES } from './genome.js';
 import { compileBrain, brainStep, initBrain } from './brain.js';
 import { quatFromMat, qmul, qconj, qrot, qlog, dot, sub, add, scale, cross, len } from './math.js';
 
@@ -91,6 +91,13 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 //   duration   seconds measured after settling (null = the task's own)
 //   gravity    m/s^2 on land          friction   ground and body friction
 //   drag       water viscosity        lightDist  light's distance (following)
+//   strength   muscle strength, x PHYS.strength (all creatures)
+//   toneMin, levelMin, braceMin   every joint's reflex gains are at least these (0..1), whatever
+//              its genes say: stiffens any creature, old ones included
+//   toneRate, reflexRate   reflex speeds (PHYS.toneRate, PHYS.reflexRate)
+//   jointDamp  passive joint damping, per unit effective inertia
+//   jointRange every joint limit is cut to within this many radians of the built angle (1.6 =
+//              no change); small ranges stop legs circling like paddlewheels
 //   start      getting up: the pose it starts in, 'side' (rolled onto its side), 'back' (upside
 //              down) or 'sitting' (pitched back 60 degrees, rump down)
 //   buoyancy   surface swimming: water's density relative to the creatures' (1.5 floats a
@@ -126,6 +133,7 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 //              both creatures touch the ball at once
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 1.0, drag: 3, lightDist: 6, buoyancy: 1.5, start: 'side',
+  strength: 1, toneMin: 0, levelMin: 0, braceMin: 0, toneRate: 8, reflexRate: 6, jointDamp: 3, jointRange: 1.6,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
   stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
@@ -253,6 +261,11 @@ export class Creature {
     let { parts } = develop(genome);
     this.genome = genome;
     this.world = world;
+    // the run's body settings (scene), defaulting to PHYS
+    const ph = opts.phys || {};
+    this.ph = { strength: ph.strength ?? 1, floor: [ph.toneMin || 0, ph.levelMin || 0, ph.braceMin || 0],
+      toneRate: ph.toneRate ?? PHYS.toneRate, reflexRate: ph.reflexRate ?? PHYS.reflexRate,
+      damp: ph.jointDamp ?? PHYS.jointDamp, range: Math.min(PHYS.limitMax, ph.jointRange ?? PHYS.limitMax) };
     this.valid = parts.length > 0 && !tooBig(parts) && !interpenetrates(parts);
     this.parts = parts;
     if (!this.valid) return;
@@ -373,14 +386,14 @@ export class Creature {
         return ip * ic / (ip + ic);
       });
       // reflexes: gains, and which way is up in each part's own frame as built
-      const rf = genome.nodes[p.node].reflex || [0, 0, 0];
+      const rf = (genome.nodes[p.node].reflex || [0, 0, 0]).map((x, k) => Math.max(x, this.ph.floor[k]));
       const upOf = k => qrot(qconj(this.partQ[k]), [0, 1, 0]);
-      const strength = PHYS.strength * Math.min(partArea(p.half), partArea(par.half)) ** 1.5;
+      const strength = PHYS.strength * Math.min(partArea(p.half), partArea(par.half)) ** 1.5 * this.ph.strength;
       const lim = genome.nodes[p.node].limits;
       this.joints.push({
         part: i, pb, cb, F, qF: quatFromMat(F), sigma, dofs, iEff, strength, limits: lim,
         servo: !!this.genome.nodes[p.node].servo,
-        reflex: rf, anyReflex: rf.some(x => x > 0), iP, iC, pp: p.parent, upC: upOf(i), upP: upOf(p.parent),
+        reflex: rf, anyReflex: rf.some(x => x > 0), effort: [0, 0, 0], iP, iC, pp: p.parent, upC: upOf(i), upP: upOf(p.parent),
         // Rapier's motor axes: the free angular axes of the joint's frame on the parent
         handle: joint.handle, f1: joint.frameX1(), raxes: MOTOR_AXES[p.joint], mTarget: [0, 0, 0], mRate: [0, 0, 0], mMax: 0, motors: false,
         eff: dofs.map(a => effIndex.get(i * 3 + a)),
@@ -395,6 +408,60 @@ export class Creature {
     this.bt = new Array(this.nb); this.bq = new Array(this.nb);
     this.bv = new Array(this.nb); this.bw = new Array(this.nb); this.bc = new Array(this.nb);
     this.read();
+    this.makeEyes();
+  }
+
+  // Two eyes on the head (the template's head part, else the root), one on
+  // each side, set into its surface a little forward and up. Directions are
+  // in the head's frame, from the creature's forward (X), up (Y) and side
+  // (Z) as built; eye 0 is on the +Z side. Each pixel's ray turns from the
+  // eye's gaze (out and 45 degrees forward) by its azimuth about up and its
+  // elevation, the same formula for both eyes, so a mirror image of one eye's
+  // pixel is the other eye's pixel with the azimuth reversed (mirrorEye).
+  makeEyes() {
+    const roles = TEMPLATES[this.genome.plan?.type] ? this.parts.map(p => this.genome.nodes[p.node].role) : null;
+    let head = roles ? roles.indexOf('head') : -1;
+    if (head < 0) head = 0;
+    const p = this.parts[head], qi = qconj(this.partQ[head]);
+    const F = qrot(qi, [1, 0, 0]), U = qrot(qi, [0, 1, 0]), L = qrot(qi, [0, 0, 1]);
+    const ext = u => support(p, [[1, 0, 0], [0, 1, 0], [0, 0, 1]], u);
+    const r = Math.max(0.03, Math.min(0.08, 0.25 * Math.min(...p.half)));   // drawn size only
+    this.eyes = [1, -1].map(side => {
+      const lat = scale(L, side);
+      const pos = add(add(scale(lat, ext(lat) * 0.92), scale(F, 0.35 * ext(F))), scale(U, 0.3 * ext(U)));
+      const gaze = scale(add(lat, F), Math.SQRT1_2), across = cross(U, gaze);
+      const rays = [];
+      for (let v = 0; v < EYE_V; v++) for (let h = 0; h < EYE_H; h++) {
+        const az = (h / (EYE_H - 1) - 0.5) * 80 * Math.PI / 180, el = (v / (EYE_V - 1) - 0.5) * 50 * Math.PI / 180;
+        const hz = add(scale(gaze, Math.cos(az)), scale(across, Math.sin(az)));
+        rays.push({ h, v, d: add(scale(hz, Math.cos(el)), scale(U, Math.sin(el))) });
+      }
+      return { part: head, pos, gaze, r, rays };
+    });
+  }
+
+  // Fill the eye pixels (only if the brain reads them: rays are the costly
+  // part of sensing). Eyes refresh every other step (30 Hz), holding the
+  // image between. salient(body handle): the prize or another creature.
+  look(salient) {
+    if (!this.brain.usesEyes) return;
+    const S = this.sens, E0 = this.brain.E0;
+    if ((this.looks = (this.looks || 0) + 1) % 2 === 0) { S.set(this.seen, E0); return; }
+    const own = this.colliderPart;
+    const pred = col => !own.has(col.handle);
+    this.eyes.forEach((eye, e) => {
+      const { c, q } = this.partPose(eye.part), o = add(c, qrot(q, eye.pos));
+      for (const ray of eye.rays) {
+        const d = qrot(q, ray.d);
+        const hit = this.world.castRay(new RAPIER.Ray(V(o), V(d)), EYE_RANGE, true, undefined, undefined, undefined, undefined, pred);
+        const i = E0 + eyeIndex(e, ray.h, ray.v, 0);
+        if (!hit) { S[i] = 0; S[i + 1] = 0; continue; }
+        S[i] = 1 - hit.timeOfImpact / EYE_RANGE;
+        const body = hit.collider.parent();
+        S[i + 1] = body && salient(body.handle) ? 1 : 0;
+      }
+    });
+    this.seen = S.slice(E0, E0 + NEYE);
   }
 
   bodyCom(b) {
@@ -576,7 +643,11 @@ export class Creature {
         j.angle[k] = j.sigma[k] * ang[k];
         j.rate[k] = j.sigma[k] * dot(wrel, j.axis[k]);
       }
-      for (const k of j.dofs) S[j.part * NSENS + k] = j.angle[k];
+      for (const k of j.dofs) {
+        S[j.part * NSENS + k] = j.angle[k];
+        S[j.part * NSENS + 23 + k] = j.rate[k];
+        S[j.part * NSENS + 26 + k] = j.effort[k];
+      }
     }
     // symmetry position: which side / which arm this part belongs to
     for (let i = 0; i < this.parts.length; i++) { S[i * NSENS + 15] = this.parts[i].phase || 0; S[i * NSENS + 16] = this.parts[i].chain || 0; }
@@ -649,14 +720,14 @@ export class Creature {
         // the joint's rotation from its built angle (or the nearest angle its limits allow)
         let th = [0, 0, 0];
         for (const k of j.dofs) {
-          const lo = Math.max(-PHYS.limitMax, j.limits[k][0]), hi = Math.min(PHYS.limitMax, j.limits[k][1]);
+          const lo = Math.max(-this.ph.range, j.limits[k][0]), hi = Math.min(this.ph.range, j.limits[k][1]);
           th = add(th, scale(j.axis[k], j.sigma[k] * (j.angle[k] - Math.max(lo, Math.min(hi, 0)))));
         }
-        goal = add(goal, scale(th, -tone * PHYS.toneRate));
+        goal = add(goal, scale(th, -tone * this.ph.toneRate));
       }
       const e = (part, upLocal) => { const u = qrot(this.partPose(part).q, upLocal); return [-u[2], 0, u[0]]; };   // u x (0, 1, 0)
-      if (level > 0) goal = add(goal, scale(sub(scale(e(j.part, j.upC), PHYS.reflexRate), tumble(wP)), level));
-      if (brace > 0) goal = add(goal, scale(sub(tumble(wC), scale(e(j.pp, j.upP), PHYS.reflexRate)), brace));
+      if (level > 0) goal = add(goal, scale(sub(scale(e(j.part, j.upC), this.ph.reflexRate), tumble(wP)), level));
+      if (brace > 0) goal = add(goal, scale(sub(tumble(wC), scale(e(j.pp, j.upP), this.ph.reflexRate)), brace));
       goal = scale(goal, 1 / gs);
       const fq = qmul(this.bq[j.pb], j.f1), wrel = sub(wC, wP);
       j.raxes.forEach((r, n) => {
@@ -689,7 +760,7 @@ export class Creature {
             // range, reached by a PD drive within the same torque limit, so a
             // wave of targets becomes a wave of bending rather than torques
             // whose reactions cancel along a chain
-            const lo = Math.max(-PHYS.limitMax, j.limits[k][0]), hi = Math.min(PHYS.limitMax, j.limits[k][1]);
+            const lo = Math.max(-this.ph.range, j.limits[k][0]), hi = Math.min(this.ph.range, j.limits[k][1]);
             const goal = lo + (Math.max(-1, Math.min(1, out[j.eff[n]])) + 1) / 2 * (hi - lo);
             const w0 = PHYS.servoFreq;
             t = I * (w0 * w0 * (goal - ang) - 2 * PHYS.servoDamp * w0 * rate);
@@ -698,9 +769,10 @@ export class Creature {
           // positive muscle work, for energy audits: completed with the
           // rate after the step (trapezoid rule) in creditWork()
           j.mt[k] = t; j.mr[k] = rate;
+          j.effort[k] = t / j.strength;   // proprioception, sensed next step
         }
-        t -= PHYS.jointDamp * I * rate;
-        const lo = Math.max(-PHYS.limitMax, j.limits[k][0]), hi = Math.min(PHYS.limitMax, j.limits[k][1]);
+        t -= this.ph.damp * I * rate;
+        const lo = Math.max(-this.ph.range, j.limits[k][0]), hi = Math.min(this.ph.range, j.limits[k][1]);
         // Joint limits are inelastic stops: past a limit, an angular impulse
         // cancels outward motion (including this step's muscle push) and
         // sets a small return speed. Explicit limit springs leaked energy,
@@ -876,7 +948,7 @@ export class Sim {
     this.light = task.kind === 'follow' ? lightPos(taskName, trial, phase, sc.lightDist) : null;
     // the competition's ball (or cube); `cube` is the body, whichever shape
     this.cube = null;
-    const copts = { friction: this.relaxing ? 0 : sc.friction, drag: sc.drag, groundHandle: this.groundHandle };
+    const copts = { friction: this.relaxing ? 0 : sc.friction, drag: sc.drag, groundHandle: this.groundHandle, phys: sc };
     if (task.pair) {
       const coop = this.coop = task.kind === 'cooperate';
       // volley: passes so far; who touched the ball last, and where it was
@@ -1033,6 +1105,12 @@ export class Sim {
 
   get done() { return this.steps >= this.totalSteps; }
 
+  // what an eye sees as salient: the prize (ball, cube or barbell) or another creature's body
+  salient(h, i) {
+    if (this.cube && this.cube.handle === h) return true;
+    return this.creatures.some((c, k) => k !== i && c.valid && c.bodies.some(b => b.handle === h));
+  }
+
   cubePos() { return this.cube ? A(this.cube.translation()) : null; }
 
   step() {
@@ -1050,6 +1128,7 @@ export class Sim {
       if (this.coop) other = this.goal;
       else if (task.pair && cs[1 - i] && cs[1 - i].valid) other = cs[1 - i].com();
       c.sense(world, target, other);   // joint angles and rates too, for limits and damping
+      c.look(h => this.salient(h, i));
       if (this.surface) c.feelWater();
       // settling apart, the brain waits: its senses are from the wrong place
       if (!this.apart) {
