@@ -104,6 +104,8 @@ export class View {
     this.barMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 0.6, roughness: 0.35 });
     // stairs: pale stone
     this.stairMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: 0.85 });
+    // slalom gate panels: racing red, so they stand out on the snow
+    this.gateMat = new THREE.MeshStandardMaterial({ color: 0xd8262c, roughness: 0.6 });
     // cooperation: the goal, a ring with a faint disc, flat on the ground
     this.goalMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     this.goalFill = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false });
@@ -195,29 +197,12 @@ export class View {
         else { cell.light = this.light.clone(false); cell.light.add(this.light.children[1].clone()); this.add(cell.light); }
         cell.light.position.fromArray(sim.light).add(off);
       }
-      if (sim.barbell) {
-        // lifting: a group of a bar and two plates, moved as one body
-        cell.cube = new THREE.Group();
-        for (const b of sim.barbell) {
-          const geo = new THREE.BoxGeometry(2 * b.box[0], 2 * b.box[1], 2 * b.box[2]);
-          this.owned.push(geo);
-          const m = new THREE.Mesh(geo, b.plate ? this.cubeMat : this.barMat);
-          m.position.fromArray(b.at);
-          m.castShadow = true;
-          cell.cube.add(m);
-        }
-        this.add(cell.cube);
-      } else if (sim.cube) {
-        if (k === 0) { cell.cube = this.cube; this.cube.visible = true; }
-        else { cell.cube = this.cube.clone(); this.add(cell.cube); }
-        cell.cube.geometry = sim.ballSphere ? this.ballGeo : this.cubeGeo;
-        cell.cube.material = sim.ballSphere ? this.ballMat : this.cubeMat;
-        cell.cube.scale.setScalar(sim.ballR);
-      }
+      cell.k = k;
+      this.addCube(cell);
       for (const b of sim.statics || []) {
         const geo = new THREE.BoxGeometry(2 * b.h[0], 2 * b.h[1], 2 * b.h[2]);
         this.owned.push(geo);
-        const m = new THREE.Mesh(geo, this.stairMat);
+        const m = new THREE.Mesh(geo, b.gate ? this.gateMat : this.stairMat);
         m.position.fromArray(b.c).add(off);
         m.castShadow = m.receiveShadow = true;
         this.add(m);
@@ -326,7 +311,8 @@ export class View {
       // skis: planks fixed to the foot's body
       for (const ski of c.skis || []) {
         const mesh = new THREE.Mesh(this.boxGeo, this.skiMat);
-        mesh.scale.set(2 * SKI_HALF[0], 2 * SKI_HALF[1], 2 * SKI_HALF[2]);
+        const h = ski.half || SKI_HALF;
+        mesh.scale.set(2 * h[0], 2 * h[1], 2 * h[2]);
         mesh.castShadow = true;
         mesh.userData = { creature: ci, body: ski.body, local: ski.at, eye: true };
         this.scene.add(mesh);
@@ -400,6 +386,31 @@ export class View {
     return n ? sum.divideScalar(n) : null;
   }
 
+  // the cell's ball, cube, barbell or throwing implement: built with the
+  // cell, or (lifting, throwing) once it appears as measuring starts
+  addCube(cell) {
+    const { sim, k } = cell;
+    if (sim.barbell) {
+      // lifting: a group of a bar and two plates, moved as one body
+      cell.cube = new THREE.Group();
+      for (const b of sim.barbell) {
+        const geo = new THREE.BoxGeometry(2 * b.box[0], 2 * b.box[1], 2 * b.box[2]);
+        this.owned.push(geo);
+        const m = new THREE.Mesh(geo, b.plate ? this.cubeMat : this.barMat);
+        m.position.fromArray(b.at);
+        m.castShadow = true;
+        cell.cube.add(m);
+      }
+      this.add(cell.cube);
+    } else if (sim.cube) {
+      if (k === 0) { cell.cube = this.cube; this.cube.visible = true; }
+      else { cell.cube = this.cube.clone(); this.add(cell.cube); }
+      cell.cube.geometry = sim.ballSphere ? this.ballGeo : this.cubeGeo;
+      cell.cube.material = sim.ballSphere ? this.ballMat : this.cubeMat;
+      cell.cube.scale.setScalar(sim.ballR);
+    }
+  }
+
   update() {
     for (const cell of this.cells) {
       const { sim, off } = cell;
@@ -411,6 +422,7 @@ export class View {
         m.position.set(c[0] + off.x, c[1] + off.y, c[2] + off.z);
         if (local) m.position.add(this.tmpV.fromArray(local).applyQuaternion(m.quaternion));
       }
+      if (sim.cube && !cell.cube) this.addCube(cell);
       if (cell.cube) {
         const t = sim.cube.translation(), r = sim.cube.rotation();
         cell.cube.position.set(t.x + off.x, t.y + off.y, t.z + off.z);

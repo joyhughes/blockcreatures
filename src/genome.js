@@ -601,6 +601,14 @@ export function mutate(g, rng, amount = 1.5, opts) {
   const tpl = TEMPLATES[g.plan?.type];
   // where the eyes sit: front (binocular) to sides (wide field)
   if (rng.chance(rate * 2)) g.eyes = { spread: clamp((g.eyes?.spread ?? EYE_SPREAD) + rng.gauss() * 0.15, 0, 1) };
+  // a quadruped's canned gait, fitted to its body (sim.js GAITS, scene gait):
+  // stride rate, hip swing, knee lift, back flex, each 0..1 (absent = 0.5)
+  // (a fixed chance: at the genome's site rate, about 1 mutant in 100 changed it)
+  if (g.plan?.type === 'quadruped' && rng.chance(0.2)) {
+    const t = { ...(g.gait || {}) };
+    for (const k of ['hz', 'swing', 'lift', 'spine']) t[k] = clamp((t[k] ?? 0.5) + rng.gauss() * 0.15, 0, 1);
+    g.gait = t;
+  }
   for (let tries = 0; tries < 50; tries++) {
     let n = 0;
     // 1. node internals
@@ -753,6 +761,7 @@ export function crossover(a, b, rng) {
   const g = { nodes, globals };
   if (a.plan) g.plan = { ...a.plan };
   if (a.eyes || b.eyes) g.eyes = { ...(rng.chance(0.5) ? a.eyes || b.eyes : b.eyes || a.eyes) };
+  if (a.gait || b.gait) g.gait = { ...(rng.chance(0.5) ? a.gait || b.gait : b.gait || a.gait) };
   // templates: both parents have the same nodes in the same order, so this
   // swaps whole body regions
   return TEMPLATES[g.plan?.type] ? conform(g) : gc(g);
@@ -834,6 +843,7 @@ const BLADE = to => ({ to, face: 0, u: 0, v: 0, rot: [[-0.3, 0.3], [-0.3, 0.3], 
 // it, a "blade" grew into a 0.45 m block: a weight to swing, not a fin
 const BLADE_ROLE = { optional: true, blade: true, dims: [[0.08, 0.3], [0.03, 0.45], [0.03, 0.45]], joints: ['rigid', 'revolute', 'universal'], minDim: 0.03, conns: [] };
 const BLADE_THIN = 0.06;
+const DIGIT_DENSITY = 10;
 // a chain: the part repeats from its own far end
 const chain = (to, scale = [0.75, 1], rot = [[-0.2, 0.2], [-0.3, 0.3], [-0.3, 0.3]]) => ({ to, face: 0, u: 0, v: 0, rot, scale });
 // a pair of limbs on the +Z side face (mirrored to -Z) at fore-aft position u, tilted down
@@ -994,7 +1004,8 @@ export const TEMPLATES = {
     head: { optional: true, dims: [[0.15, 0.3], [0.15, 0.3], [0.15, 0.3]], joints: NECK, conns: [] },
     upperArm: { optional: true, dims: [[0.2, 0.45], [0.06, 0.12], [0.06, 0.12]], joints: HIP,
       conns: [{ to: 'forearm', face: 0, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] }] },
-    forearm: { dims: [[0.2, 0.45], [0.05, 0.1], [0.05, 0.1]], joints: KNEE, conns: [] },
+    forearm: { dims: [[0.2, 0.45], [0.05, 0.1], [0.05, 0.1]], joints: KNEE,
+      conns: [{ to: 'hand', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [-0.2, 0.2]], scale: 1 }] },
     thigh: { dims: [[0.25, 0.55], [0.08, 0.18], [0.08, 0.18]], joints: HIP, conns: [{ to: 'shin', face: 0, u: 0, v: 0, rot: R0, scale: [0.8, 1.2] }] },
     shin: { dims: [[0.25, 0.55], [0.07, 0.16], [0.07, 0.16]], joints: KNEE, conns: [{ to: 'foot', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [-0.2, 0.2]], scale: 1 }] },
     // X down (thickness), Y across, Z along: the foot lies flat under the shin
@@ -1008,6 +1019,24 @@ export const TEMPLATES = {
       { to: 'head', face: 0, u: 0, v: [-0.3, 0.3], rot: R0, scale: [0.8, 1.2] },
       { to: 'upperArm', face: 2, u: [-0.3, 0.3], v: [0.4, 0.9], rot: [[-0.3, 0.3], [0.5, 1], [-0.4, 0.4]], scale: [0.8, 1.2] },
     ] },
+    // Hands (last, so genomes from before them keep their node numbers, and
+    // replay without them): a palm on a two-way wrist; X along, Y through
+    // the palm (its -Y side is the palm), Z across. Three fingers across its
+    // end, each a chain of hinged segments, turned a quarter about their
+    // length so the hinge closes them toward the palm; a thumb from the
+    // palm's side near the wrist, angled across the palm, its base a two-way
+    // joint (it swings across to oppose the fingers) and its tip a hinge
+    hand: { dims: [[0.06, 0.12], [0.025, 0.05], [0.06, 0.12]], joints: HIP,
+      conns: [-0.65, 0, 0.65].map(v => ({ to: 'finger', face: 0, u: [-0.2, 0.2], v: [v - 0.05, v + 0.05], rot: [[1.45, 1.7], [-0.15, 0.15], [-0.1, 0.1]], scale: 1 }))
+        .concat([{ to: 'thumb', face: 4, u: [-0.6, -0.2], v: [-0.6, -0.2], rot: [[1.3, 1.8], [0.5, 1], [-0.3, 0.3]], scale: 1 }]) },
+    // digits are DIGIT_DENSITY x as dense as the rest (at density 1 a finger
+    // weighed 1/10,000 of the body), with armature: extra turning inertia
+    // (Creature), or they spun about their length at up to 400 rad/s
+    finger: { dims: [[0.03, 0.06], [0.015, 0.025], [0.015, 0.025]], joints: KNEE, recur: [2, 3], minDim: 0.015, density: DIGIT_DENSITY, armature: 5,
+      conns: [chain('finger', [0.75, 0.95], [[-0.05, 0.05], [-0.1, 0.1], [-0.1, 0.1]])] },
+    thumb: { dims: [[0.03, 0.06], [0.018, 0.028], [0.018, 0.028]], joints: HIP, minDim: 0.015, density: DIGIT_DENSITY, armature: 5,
+      conns: [{ to: 'thumbTip', face: 0, u: 0, v: 0, rot: [[-0.05, 0.05], [-0.1, 0.1], [-0.1, 0.1]], scale: [0.75, 0.95] }] },
+    thumbTip: { dims: [[0.025, 0.05], [0.015, 0.025], [0.015, 0.025]], joints: KNEE, minDim: 0.015, density: DIGIT_DENSITY, armature: 5, conns: [] },
   } },
 };
 // role order = node order; the first role is the root

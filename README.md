@@ -16,14 +16,17 @@ evolved together, for the same evolutionary targets Sims used:
 | Cooperation (beyond Sims) | land, two creatures side by side behind a heavy ball, a goal ahead | one shared score: 0.8 × the share of the way the ball got to the goal + 0.2 × the share of their distance to the ball the two closed; a goal ends the game and scores 1 + the share of time left (so 1–2) |
 | Volley (beyond Sims) | land, two creatures facing each other across a light ball | one shared score: the number of passes (the ball travels ≥ 0.5 m between one creature's touch and the other's), plus up to 0.75 before the first for touching it and closing on it |
 | Wrestling (beyond Sims) | land, two same-size creatures face to face, no ball | sumo: 1 + (how far the opponent's centre of mass ever got outside a 2 m ring − how far mine did) / 1 m + 0.5 × (its mean distance from the middle − mine) / 2 m, capped to 0–2, + 0.5 × the share of the bout the two are in contact; all vs. best like competition |
-| Stairs (beyond Sims) | land, a pit at the bottom of a square stepped amphitheatre (12 steps of 0.15 × 0.4 m) | metres climbed: ½ the centre of mass's rise + ½ the lowest part's final height |
+| Stairs (beyond Sims) | land, a pit at the bottom of a square stepped amphitheatre (12 steps of 0.15 × 0.4 m) | metres climbed: ½ the centre of mass's rise + ½ the lowest part's final height. Animal templates (new runs) climb under walking's fall rules, the steps counting as ground: a fall ends the climb, keeping its height from 2 s before, and the standing bonus is added. Without them bipeds and quadrupeds toppled before reaching the steps, and lost nothing |
 | Biped walking (beyond Sims) | land, the biped template | as walking, up to the first time any part but a foot or the tail touches the ground, + 0.1 × the share of the time it stayed up |
 | Quadruped walking (beyond Sims) | land, the quadruped template | as biped walking, falls being anything but the paws, toes or tail touching the ground |
 | Knocked down (beyond Sims) | land; one second in, a pendulum ball (2 × the creature's mass, 2.5 m rope, from 75°) swings in from a random direction and is taken away after one pass; two opposite directions per test, re-drawn each generation | standing, as in getting up, from the strike on: ¾ the last third's average, ¼ the whole time's |
 | Skiing (beyond Sims) | land on skis: a plank under every foot, slippery snow (friction 0.08) with edges that grip sideways, down an 8° hill (Scene: *Hill*; 0 = skating on ice) | metres downhill (on the flat, in any direction) per second until any fall, plus the standing bonus |
 | Standing (beyond Sims) | land; walking's fall rules | half the share of the time it stays up, half its average height (a share of its built pose's) over the whole time |
 | Getting up (beyond Sims) | land; the creature starts lying on its side, on its back or sitting (Scene: *Start*) | how well it stands, 0–1: uprightness (on its back 0, on its side 0.5, as built 1) × centre-of-mass height as a share of the built pose's, halved while any part but its feet touches the ground (a template's feet, paws, toes and tail; otherwise the parts on the ground as built); ¾ the last third's average, ¼ the whole run's |
-| Lifting (beyond Sims) | land, a barbell (a 1.2 m bar between two square 0.4 m plates, 0.3 kg; the bar 0.2 m off the ground) beside the creature | the barbell's height off the ground averaged over the last second, + up to 0.2 for closing on it |
+| Lifting (beyond Sims) | land, a barbell (a 0.72 m bar, 6 cm thick, between two square 0.24 m plates, 0.3 kg; the bar 0.12 m off the ground: thin enough for a hand to close round, high enough for a trunk to get under; runs before had a 1.2 m bar between 0.4 m plates) beside the creature | the barbell's height off the ground averaged over the last second, + up to 0.2 for closing on it |
+| Slalom (beyond Sims) | as skiing, with two gates down the hill (3.5 m apart, alternately 0.8 m to either side): each a 1.6 m opening between two tall red panels, which eyes see as salient up to 5 m away and bodies pass through (breakaway; solid ones stopped every straight-line beginner dead) | as skiing, but distance past the first gate missed doesn't count. Scene: *Gates*, spacing, offset, width |
+| Skating spins (beyond Sims) | flat ice (friction 0.08), short skates (0.3 m blades) on the feet | turns in the air in its best jump that it landed on its skates alone and held upright for 0.5 s; a jump ending in a fall scores a tenth of its turns. Turns are the whole body's: its angular momentum about the vertical through its centre of mass over its moment of inertia, with the momentum held to no more than at take-off, so twisting one part against the rest (as a falling cat rights itself) nets nothing, pulling the limbs in spins it faster, and the solver can't add spin. Shaping (Scene, ≤ 0.1): a third each for net turns spun upright on the ice, time in the air, and landing any jump |
+| Shot put, Javelin (beyond Sims) | land; the implement (a 6 cm-radius shot, 5% of the creature's mass; a 1.2 m javelin, 1%) appears on a stand in front of the creature, as high as its centre of mass, as measuring starts | the farthest throw: from where it was let go (nothing else touching it) to where it first lands, so carrying, rolling or pushing it off the stand earn nothing; a biped must let go from a hand; a javelin landing other than tip first scores a quarter. Shaping (Scene, ≤ 0.1): half for touching it, half for lifting it up to 0.5 m |
 
 ### Falling over: Sims' rules
 
@@ -463,9 +466,13 @@ net of the centre of mass's drop. The biped champion stood still for 9 s and
 fell over backwards in the last second, which was most of its score (0.28);
 under these rules it scores 0.12, nearly all for standing.
 
-**Friction** (Scene) is a coefficient between bodies and the ground; the
-default is now 2, grippy like rubber on a rough surface, so bodies can't skid
-around as easily and standing is easier. Runs from before keep 1.
+**Friction** (Scene, up to 20) is a coefficient between bodies and the
+ground; the default is now 3, grippier than rubber on a rough surface, so
+bodies can't skid around as easily and standing is easier. Runs keep what
+they had (1, then 2). Measured at the contact points of evolved walkers,
+though, feet slide about as much at friction 10 as at 2 (0.13–0.45 m/s
+while touching): the sliding comes from feet that carry little weight, which
+no coefficient grips, more than from the coefficient.
 
 **Speed is net distance** (Scene: *Speed*, new runs; every speed target:
 walking, swimming, surface swimming, biped and quadruped walking). Speed is
@@ -628,6 +635,12 @@ stood.
 Old genomes have none of these and replay unchanged (all 24 champions
 checked).
 
+**Replays match their scores.** With learned weights kept, the genome
+written back after a life (what offspring inherit) isn't the one that
+earned its score, and run files saved that one: a winner replayed from the
+weights it ended its life with, and a quadruped that scored 0.66 replayed at
+0.23. The history now keeps each winner's genome as it was scored.
+
 **Getting up** (target): the creature starts lying on its side, on its back
 or sitting, pitched back 60° with its rump down (Scene: *Start*), and has to
 stand and stay standing. Its reflexes already pull toward the standing pose,
@@ -681,6 +694,45 @@ this), team B starts from random creatures if that creature isn't in team B's
 plan. Each team B plan is a separate run, and labels name the plans (`team A
 (snake) best, against team B (insect)'s best of generation 4`). Before the first
 generation, the view shows a random creature of each plan.
+
+## Canned gaits and hands
+
+**Quadruped gaits** (Scene: *Gait*; quadrupeds walking on land). A central
+pattern generator drives each hip (its fore-aft axis) and knee in a fixed
+footfall pattern, in place of the brain, which keeps the spine's sideways
+bend, the neck, the tail and the hips' splay for balance:
+
+| Gait | Footfalls | Duty | Strides/s |
+|---|---|---|---|
+| walk | four-beat: LH, LF, RH, RF; three feet down at a time | 0.7 | 1.0 |
+| trot | diagonal pairs together | 0.5 | 1.6 |
+| canter | three-beat: RH, then LH with RF, then the leading LF | 0.45 | 1.8 |
+| gallop | transverse (a horse's): RH LH, then RF LF | 0.4 | 2.2 |
+| run | rotary (a cheetah's): LH RH, then RF LF, the back flexing | 0.35 | 2.6 |
+
+In stance a foot sweeps back from forward; in swing the knee folds the foot
+back under the body while the hip carries it forward. Which joint axis
+swings each leg forward, and which way folds a knee, is read from the body
+as it stands. Each swing is centred and cut to fit the joint's limits (an
+evolved hip stood at its limit), and the motors lead with the pattern's own
+speed: chasing the error alone, a hip lagged its stride by about 60°. Evolution
+fits the body, and a trait (genome.gait: stride rate ×0.6–1.6, hip swing
+0.15–0.6 rad, knee lift 0.3–1.2 rad, back flex) fits the gait to it. Muscle
+strength scales with a limb's cross-section, so thin legs evolved for a
+brain that barely lifted them can't swing a gait: such a body follows it
+at ×10 strength (correlation 0.92–0.99), not at ×1.
+
+**Hands** (biped template; arms are optional). Each arm ends in a palm on a
+two-way wrist, three fingers of two or three hinged segments that close
+toward the palm, and a thumb from the palm's side, angled across it, whose
+base swings two ways (it opposes the fingers) and whose tip hinges. Fingers
+are tiny next to a body, which solvers dislike, and at first two in three
+handed bipeds blew up, fingers spinning about their length at up to
+400 rad/s. Three standard fixes: digits are 10× as dense as the rest;
+they get armature (extra turning inertia, 5× their largest principal
+moment, as robot simulators add); and a hand's parts don't collide with
+each other or their forearm (side by side, fingers touched every step).
+Now none do. Genomes from before hands replay without them.
 
 ## Scene
 

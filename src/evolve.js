@@ -19,7 +19,7 @@
 // mutation is almost all parameter tweaks.
 
 import { applyLearned } from './brain.js';
-import { TEMPLATES, randomGenome, mutate, structural, descriptor, crossover, graft, clone, develop, interpenetrates, tooBig, armLength, growArm, JOINT_DOFS } from './genome.js';
+import { TEMPLATES, conform, randomGenome, mutate, structural, descriptor, crossover, graft, clone, develop, interpenetrates, tooBig, armLength, growArm, JOINT_DOFS } from './genome.js';
 import { makeRng } from './math.js';
 import { TASKS } from './sim.js';
 
@@ -33,9 +33,15 @@ export function viable(g, minArm = 0) {
   return !tooBig(parts) && !interpenetrates(parts);
 }
 
+// A run started from a trained walker (starters/<plan>.json): an unmutated
+// copy on each island and light mutants, so most of the first generation can
+// still stand and walk.
+export const TRAINED_SEED = { amount: 1, copies: 3 };
+
 export class Evolver {
   // evaluate(jobs) -> Promise<number[][]>, one fitness array per job
-  // body: { plan: {type: 'free'|'bilateral'|'radial', n}, round: bool, minArm: segments }
+  // body: { plan: {type: 'free'|'bilateral'|'radial', n}, round: bool, minArm: segments,
+  //   require: optional template roles every creature must have on (e.g. ['upperArm']) }
   // islands: number of sub-populations; migrate: generations between migrations
   // novelty: 0..1 weight of novelty rank in selection; structural: share of
   // mutants given a structural change; migrate: 0 = never. All 0 with
@@ -85,11 +91,19 @@ export class Evolver {
     return g;
   }
 
-  ok(g) { return this.inPlan(g) && viable(g, this.body.minArm || 0); }
+  ok(g) { return this.inPlan(g) && this.hasRequired(g) && viable(g, this.body.minArm || 0); }
+  hasRequired(g) {
+    const req = this.body.require;
+    return !req?.length || !TEMPLATES[g.plan?.type] || req.every(r => g.nodes.some(nd => nd.role === r && nd.on !== false));
+  }
 
   // With a required arm length, random genomes rarely have one, so an arm is
-  // grown onto those that don't.
+  // grown onto those that don't; required template parts are switched on.
   withArm(g) {
+    if (!this.hasRequired(g)) {
+      for (const nd of g.nodes) if (this.body.require.includes(nd.role)) nd.on = true;
+      conform(g);
+    }
     const k = this.body.minArm;
     if (k && !TEMPLATES[g.plan?.type] && armLength(develop(g).parts) < k) growArm(g, this.rng, k + this.rng.int(3), this.body);
     return g;
@@ -118,19 +132,23 @@ export class Evolver {
     this.rival?.seed();
   }
 
-  // Population of the given genome plus mutants of it.
-  seedFrom(g) {
+  // Population of the given genome plus mutants of it. amount: mutation
+  // strength (3: explore around it; 1: keep what it already does, as for a
+  // trained starter); copies: unmutated copies, one per island at most.
+  seedFrom(g, opts = {}) {
+    const { amount = 3, copies = 1 } = opts;
     this.checkPlan(g);
-    this.pop = this.ok(g) ? [{ g: clone(g), fit: null, id: this.nextId++ }] : [];
+    g = this.withArm(clone(g));
+    this.pop = this.ok(g) ? Array.from({ length: Math.min(copies, this.islands, this.popSize) }, () => ({ g: clone(g), fit: null, id: this.nextId++ })) : [];
     while (this.pop.length < this.popSize) {
       let m = null;
-      for (let i = 0; i < 20 && !m; i++) { const c = this.withArm(mutate(clone(g), this.rng, 3, this.body)); if (this.ok(c)) m = c; }
+      for (let i = 0; i < 20 && !m; i++) { const c = this.withArm(mutate(clone(g), this.rng, amount, this.body)); if (this.ok(c)) m = c; }
       this.pop.push({ g: m || this.randomViable(), fit: null, id: this.nextId++ });
     }
     for (const p of this.pop) p.founder = p.id;
     this.assignIslands();
     // team B of another plan can't descend from team A's creature
-    if (this.rival) this.rival.inPlan(g) ? this.rival.seedFrom(g) : this.rival.seed();
+    if (this.rival) this.rival.inPlan(g) ? this.rival.seedFrom(g, opts) : this.rival.seed();
   }
 
   // Run one generation: evaluate, record, select, reproduce. With two teams,
@@ -168,7 +186,10 @@ export class Evolver {
     todo.forEach((p, i) => {
       const r = res[i];
       if (Array.isArray(r)) p.fit = r[0];
-      else { p.fit = r.fit[0]; if (r.learned) applyLearned(p.g, r.learned); }
+      // learned weights go into the genome its offspring inherit; the run's
+      // history keeps the genome as scored (p.scored), so a replay starts
+      // from the weights that earned the score
+      else { p.fit = r.fit[0]; if (r.learned) { p.scored = clone(p.g); applyLearned(p.g, r.learned); } else p.scored = null; }
     });
 
     this.pop.sort((a, b) => b.fit - a.fit);
@@ -179,7 +200,7 @@ export class Evolver {
       gen: this.gen, best: best.fit,
       mean: fits.reduce((a, b) => a + b, 0) / fits.length,
       median: fits[fits.length >> 1],
-      genome: clone(best.g), id: best.id, phase, scene: this.scene,
+      genome: clone(best.scored || best.g), id: best.id, phase, scene: this.scene,
       // diversity: distinct generation-0 ancestors (first parent) in the population
       founders: new Set(this.pop.map(p => p.founder)).size,
       diversity: div.within, islandSpread: div.between,

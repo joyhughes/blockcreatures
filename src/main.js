@@ -1,12 +1,12 @@
 import { initPhysics, Sim, TASKS, DT, sceneFor, defaultScene } from './sim.js';
-import { Evolver } from './evolve.js';
+import { Evolver, TRAINED_SEED } from './evolve.js';
 import { Pool } from './pool.js';
 import { View } from './view.js';
 import { makeRng } from './math.js';
 import { Recorder } from './record.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1', ski: 'm/s downhill' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1', ski: 'm/s downhill', spin: 'turns', throw: 'm thrown' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -53,7 +53,7 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', buoyancy: 'scBuoyancy', start: 'scStart',
   strength: 'scStrength', toneMin: 'scToneMin', levelMin: 'scLevelMin', braceMin: 'scBraceMin',
-  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', hill: 'scHill', skiDrag: 'scSkiDrag', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
+  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', gait: 'scGait', spinShape: 'scSpinShape', slalom: 'scSlalom', gateGap: 'scGateGap', gateOffset: 'scGateOffset', gateWidth: 'scGateWidth', implMass: 'scImplMass', throwShape: 'scThrowShape', hill: 'scHill', skiDrag: 'scSkiDrag', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
   grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether',
   stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing', engage: 'scEngage', bothSides: 'scBothSides' };
@@ -113,19 +113,37 @@ const PLAN_NOTES = {
   arachnid: 'Animal template: a body with eight legs (hip and knee) (optional pincers on the front pair), a head with optional mandibles, and an optional tail with a stinger.',
   crustacean: 'Animal template: a carapace with ten legs (hip and knee), the front pair ending in pincers; a head with antennae; an optional segmented tail.',
   centipede: 'Animal template: a head with optional pincers and a chain of 3–8 segments with a pair of legs (hip and knee) on each.',
-  biped: 'Animal template: an upright torso on two legs (hip, knee and ankle), with an optional head, arms and tail. The Biped walking target always uses it.',
+  biped: 'Animal template: an upright torso on two legs (hip, knee and ankle), with an optional head, arms and tail. Arms end in hands on two-way wrists: three fingers of hinged segments that close toward the palm, and a thumb that swings across to oppose them. The Biped walking target always uses it.',
 };
 // a target that needs one body plan (biped walking) uses it whatever is picked
 const effPlan = () => TASKS[task].plan || planType;
+// Trained walkers (starters/<plan>.json): a biped and a quadruped already
+// evolved to stand and walk, for runs that start from one instead of from
+// random creatures.
+const STARTERS = {};
+for (const p of ['biped', 'quadruped']) fetch(`starters/${p}.json`).then(r => r.json()).then(c => { STARTERS[p] = c; showPlan(); }).catch(() => {});
+const trainedOn = () => $('trained').checked && !!STARTERS[effPlan()];
 function body() {
   const plan = effPlan() === 'radial' ? { type: 'radial', n: +$('radialN').value } : { type: effPlan() };
-  return { plan, round: $('round').checked, minArm: +$('minArm').value };
+  const b = { plan, round: $('round').checked, minArm: +$('minArm').value };
+  if (trainedOn()) Object.assign(b, { trained: true, require: STARTERS[effPlan()].require || [] });
+  return b;
+}
+// a new population: from the trained walker (each team in its own plan's,
+// if it has one), or random
+function seedRun(ev) {
+  if (!ev.body.trained) return ev.seed();
+  ev.seedFrom(STARTERS[ev.body.plan.type].genome, TRAINED_SEED);
+  const r = ev.rival, s = r && STARTERS[r.body.plan.type];
+  if (r && !r.inPlan(STARTERS[ev.body.plan.type].genome) && s) r.seedFrom(s.genome, TRAINED_SEED);
 }
 // Team B's body with two teams: its own plan, or null for the same as team A's
 function bodyB() {
   const t = $('planB').value;
   if (!TASKS[task].pair || $('teams').value !== '2' || !t || t === effPlan()) return null;
-  return { ...body(), plan: t === 'radial' ? { type: 'radial', n: +$('radialN').value } : { type: t } };
+  const { trained, require, ...b } = body();
+  const s = trained && STARTERS[t];
+  return { ...b, plan: t === 'radial' ? { type: 'radial', n: +$('radialN').value } : { type: t }, ...(s ? { trained, require: s.require || [] } : {}) };
 }
 const planName = p => (!p || p.type === 'free' ? 'free' : p.type + (p.n ? ' ×' + p.n : ''));
 // 'team A' / 'team B', with their plans when they differ
@@ -137,12 +155,14 @@ function teamName(k, ev = evolver) {
 function showPlan() {
   for (const b of $('plan').children) b.classList.toggle('on', b.dataset.plan === effPlan());
   $('nWrap').hidden = effPlan() !== 'radial';
+  $('trainedWrap').hidden = !STARTERS[effPlan()];
   $('planNote').textContent = PLAN_NOTES[effPlan()] + ($('round').checked ? ' Round parts: genes may choose capsules or spheres; capsules lie along the attachment axis, so recursive chains taper into tentacles.' : '')
-    + (+$('minArm').value ? ` Min arm: only creatures with an appendage of at least ${$('minArm').value} segments are viable.` : '');
+    + (+$('minArm').value ? ` Min arm: only creatures with an appendage of at least ${$('minArm').value} segments are viable.` : '')
+    + (trainedOn() ? ` Trained walker: the run starts from ${STARTERS[effPlan()].about}, lightly mutated, instead of from random creatures.` : '');
 }
 for (const b of $('plan').children) b.onclick = () => { if (running || TASKS[task].plan) return; planType = b.dataset.plan; showPlan(); switchRun(); };
-$('radialN').onchange = $('round').onchange = $('minArm').onchange = () => { if (running) return; showPlan(); switchRun(); };
-const setBodyEnabled = on => { for (const el of [...$('plan').children, $('radialN'), $('round'), $('minArm'), $('islands'), $('teams'), $('planB')]) el.disabled = !on; };
+$('radialN').onchange = $('round').onchange = $('minArm').onchange = $('trained').onchange = () => { if (running) return; showPlan(); switchRun(); };
+const setBodyEnabled = on => { for (const el of [...$('plan').children, $('radialN'), $('round'), $('minArm'), $('trained'), $('islands'), $('teams'), $('planB')]) el.disabled = !on; };
 
 // Each target and body plan (arm count and round-parts setting included) has
 // its own run: evolution stays within the plan, and switching plans keeps the
@@ -189,7 +209,7 @@ let evalCount = 0, evalT0 = 0;
 let loopDone = Promise.resolve();   // settles when the evolution loop has stopped
 async function evolveLoop() {
   // a loaded run saved without its population continues from its latest best
-  if (!evolver.pop.length) evolver.history.length && evolver.champ ? evolver.seedFrom(evolver.champ) : evolver.seed();
+  if (!evolver.pop.length) evolver.history.length && evolver.champ ? evolver.seedFrom(evolver.champ) : seedRun(evolver);
   evalT0 = performance.now(); evalCount = 0;
   while (running) {
     const before = evolver.pop.filter(p => p.fit === null).length;
@@ -407,13 +427,14 @@ $('mate').onclick = async () => {
 // champions/<task>[-<plan>][-round].json, falling back to the free-plan one
 function planTag(b = body()) {
   const p = b.plan.type === 'radial' ? 'radial' + b.plan.n : b.plan.type;
-  return (p === 'free' ? '' : '-' + p) + (b.round ? '-round' : '') + (b.minArm ? '-arm' + b.minArm : '');
+  return (p === 'free' ? '' : '-' + p) + (b.round ? '-round' : '') + (b.minArm ? '-arm' + b.minArm : '') + (b.trained ? '-trained' : '');
 }
 
 // Only a champion of exactly this target and body plan; for the free plan with
 // round parts, the plain free champion (box-only genomes are valid there).
 function championNames(b) {
   const names = [task + planTag(b)];
+  if (b.trained) names.push(task + planTag({ ...b, trained: false }));   // the same plan's, untrained
   return b.plan.type === 'free' && b.round && !b.minArm ? [...names, task] : names;
 }
 
@@ -813,6 +834,9 @@ function hudText(finalFit) {
   if (T.trials > 1) s += ` · trial ${replay.trial + 1}/${T.trials}`;
   if (sim.coop) s += sim.scored !== null ? ` · GOAL at ${sim.scored.toFixed(1)}s` : sim.tStart !== null ? ` · ball ${sim.ballToGoal().toFixed(2)} m from the goal` : '';
   if (sim.lift && sim.cube && sim.tStart !== null) s += ` · weight ${Math.max(0, sim.cube.translation().y - sim.ballR).toFixed(2)} m up`;
+  if (sim.gates && sim.track[0]?.gates) s += ` · gates ${sim.track[0].gates.map(x => (x ? '✓' : '✗')).join(' ')}`;
+  if (sim.throw && sim.tStart !== null) s += ` · best throw ${sim.throw.best.toFixed(2)} m${sim.throw.flight ? ' · in flight' : ''}`;
+  if (sim.task.kind === 'spin' && sim.track[0]?.best !== undefined) s += ` · best landed ${sim.track[0].best.toFixed(2)} turns${sim.track[0].air ? ' · in the air' : ''}`;
   if (sim.statics && sim.tStart !== null && sim.creatures[0].valid) s += ` · lowest part ${Math.max(0, sim.creatures[0].lowest()).toFixed(2)} m up`;
   if (T.kind === 'upright' && sim.track[0]) { const f = sim.track[0].fell; s += f === undefined ? ' · upright' : f < T.settle ? ' · fell while settling' : ` · fell at ${(f - T.settle).toFixed(1)}s`; }
   if (sim.volley && sim.tStart !== null) s += ` · ${sim.passes} pass${sim.passes === 1 ? '' : 'es'}`;

@@ -1,5 +1,80 @@
 [
  {
+  "file": "biped-102-biped-isl3-nov0.3-st0.25-seeded.json",
+  "mtime": 1791950172.59783,
+  "size": 4842167
+ },
+ {
+  "file": "biped-101-biped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791949470.2262337,
+  "size": 4052239
+ },
+ {
+  "file": "quadruped-101-quadruped-isl3-nov0.3-st0.25-seeded.json",
+  "mtime": 1791949440.016569,
+  "size": 6458434
+ },
+ {
+  "file": "spin-100-biped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791903944.2595263,
+  "size": 6515090
+ },
+ {
+  "file": "spin-99-biped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791903575.2778924,
+  "size": 3498448
+ },
+ {
+  "file": "stairs-99-biped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791903567.3652866,
+  "size": 3029991
+ },
+ {
+  "file": "javelin-99-biped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791903564.5562034,
+  "size": 3041339
+ },
+ {
+  "file": "stairs-99-quadruped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791903543.4746325,
+  "size": 3385232
+ },
+ {
+  "file": "shotPut-99-biped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791903476.0795877,
+  "size": 2961618
+ },
+ {
+  "file": "slalom-99-biped-isl3-nov0.3-st0.25.json",
+  "mtime": 1791903471.3397245,
+  "size": 3058348
+ },
+ {
+  "file": "quadruped-99-quadruped-isl3-nov0.3-st0.25-canter.json",
+  "mtime": 1791903426.8561118,
+  "size": 3493829
+ },
+ {
+  "file": "quadruped-99-quadruped-isl3-nov0.3-st0.25-run.json",
+  "mtime": 1791903393.7821064,
+  "size": 3546781
+ },
+ {
+  "file": "quadruped-99-quadruped-isl3-nov0.3-st0.25-gallop.json",
+  "mtime": 1791903366.4982193,
+  "size": 3525326
+ },
+ {
+  "file": "quadruped-99-quadruped-isl3-nov0.3-st0.25-trot.json",
+  "mtime": 1791903359.6736503,
+  "size": 3618546
+ },
+ {
+  "file": "quadruped-99-quadruped-isl3-nov0.3-st0.25-walk.json",
+  "mtime": 1791903340.972656,
+  "size": 3711424
+ },
+ {
   "file": "ski-96-quadruped-isl3-nov0.3-st0.25.json",
   "mtime": 1791874950.4452245,
   "size": 4684299
