@@ -74,7 +74,7 @@ export const mirrorEye = i => {
 export const REFLEXES = ['tone', 'level', 'brace'];
 
 export const SHAPES = ['box', 'capsule', 'sphere'];
-export const PLANS = ['free', 'bilateral', 'radial', 'snake', 'quadruped', 'insect', 'arachnid', 'crustacean', 'centipede', 'biped'];
+export const PLANS = ['free', 'bilateral', 'radial', 'snake', 'quadruped', 'insect', 'arachnid', 'crustacean', 'centipede', 'biped', 'centaur', 'ducktopus'];
 
 export const LIMITS = {
   dimMin: 0.1, dimMax: 1.0,
@@ -1039,6 +1039,58 @@ export const TEMPLATES = {
     thumbTip: { dims: [[0.025, 0.05], [0.015, 0.025], [0.015, 0.025]], joints: KNEE, minDim: 0.015, density: DIGIT_DENSITY, armature: 5, conns: [] },
   } },
 };
+// a horse's body and four legs (hip and knee) ending in hooves, with a human
+// torso rising from its withers: a head and two arms with the biped's hands
+const B = TEMPLATES.biped.roles, Q = TEMPLATES.quadruped.roles;
+TEMPLATES.centaur = { roles: {
+  // the hindquarters (the root), with a spine growing forward to the withers
+  body: { dims: Q.body.dims, joints: ANY, conns: [Q.body.conns[0], Q.body.conns[1],
+    { ...Q.body.conns[2], to: 'hindUpper' }] },
+  spine: { ...Q.spine, conns: [Q.spine.conns[0], { ...Q.spine.conns[1], to: 'withers' }] },
+  // the horse's chest: the forelegs hang under it and the human waist rises
+  // from the front of its back, X up as the biped's spine grows from its pelvis
+  withers: { dims: Q.chest.dims, joints: NECK, conns: [
+    { to: 'foreUpper', face: 3, u: [0.7, 0.95], v: [0.3, 0.9], rot: [[-0.2, 0.2], [-0.4, 0.4], [0, 0.4]], scale: [0.8, 1.2] },
+    { to: 'waist', face: 2, u: 0, v: [0.3, 0.8], rot: [[-0.1, 0.1], [-0.1, 0.1], [-0.1, 0.1]], scale: [0.8, 1.1] },
+  ] },
+  waist: { ...B.spine, recur: [1, 2], conns: [{ ...B.spine.conns[0], to: 'waist' }, B.spine.conns[1]] },
+  chest: B.chest,
+  head: { ...B.head, optional: false },
+  upperArm: { ...B.upperArm, optional: false },
+  forearm: B.forearm,
+  hand: B.hand, finger: B.finger, thumb: B.thumb, thumbTip: B.thumbTip,
+  tail: { ...Q.tail, recur: [2, 5], conns: [chain('tail')] },
+  foreUpper: { ...Q.foreUpper, conns: [{ ...Q.foreUpper.conns[0], to: 'foreLower' }] },
+  foreLower: { ...Q.foreLower, conns: [{ ...Q.foreLower.conns[0], to: 'hoof' }] },
+  hindUpper: { ...Q.hindUpper, conns: [{ ...Q.hindUpper.conns[0], to: 'hindLower' }] },
+  hindLower: { ...Q.hindLower, conns: [{ ...Q.hindLower.conns[0], to: 'hoof' }] },
+  // fused to the leg, like the quadruped's paw; X along the leg
+  hoof: { dims: [[0.06, 0.12], [0.12, 0.2], [0.12, 0.2]], joints: FIXED, ground: true, conns: [] },
+} };
+// an octopus's mantle on eight arms, with a duck's head on a neck at its front
+TEMPLATES.ducktopus = { roles: {
+  // the mantle (the root). Four arms low down each side, fanned fore and aft
+  // so neighbours never cross: eight, splayed out like a star
+  mantle: { dims: [[0.3, 0.6], [0.25, 0.5], [0.3, 0.6]], joints: ANY, conns: [
+    { to: 'neck', face: 0, u: [0, 0.7], v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [0.5, 1.1]], scale: [0.8, 1.2] },
+    sideLeg('arm', 0.75, [0.5, 0.9], [0.2, 0.9]), sideLeg('arm', 0.25, [0.1, 0.4], [0.2, 0.9]),
+    sideLeg('arm', -0.25, [-0.4, -0.1], [0.2, 0.9]), sideLeg('arm', -0.75, [-0.9, -0.5], [0.2, 0.9]),
+    { to: 'tuft', face: 1, u: [0, 0.6], v: 0, rot: [[-0.3, 0.3], [-0.3, 0.3], [0.2, 0.8]], scale: [0.8, 1.2] },
+  ] },
+  // a duck's neck, its last segment carrying the head
+  neck: { dims: [[0.1, 0.25], [0.06, 0.12], [0.06, 0.12]], joints: NECK, recur: [1, 3],
+    conns: [chain('neck', [0.85, 1], [[-0.1, 0.1], [-0.2, 0.2], [-0.3, 0.3]]),
+      { to: 'head', face: 0, u: 0, v: 0, rot: [[-0.2, 0.2], [-0.2, 0.2], [-1.1, -0.3]], scale: [0.8, 1.2], terminal: true }] },
+  // levelled off the neck, the bill flat at its front
+  head: { dims: [[0.12, 0.25], [0.1, 0.2], [0.1, 0.2]], joints: NECK,
+    conns: [{ to: 'bill', face: 0, u: [-0.5, 0], v: 0, rot: [[-0.1, 0.1], [-0.1, 0.1], [-0.3, 0.1]], scale: 1 }] },
+  bill: { dims: [[0.08, 0.2], [0.02, 0.04], [0.06, 0.12]], joints: FIXED, minDim: 0.02, conns: [] },
+  // an arm: a tapering chain of segments, any of them able to touch the ground
+  arm: { dims: [[0.12, 0.3], [0.04, 0.08], [0.04, 0.08]], joints: SEG, recur: [3, 6], ground: true, minDim: 0.03,
+    conns: [chain('arm', [0.8, 0.95], [[-0.2, 0.2], [-0.3, 0.3], [-0.3, 0.3]])] },
+  // a duck's tail feathers: an optional flat blade at the back
+  tuft: { ...BLADE_ROLE, dims: [[0.08, 0.25], [0.03, 0.3], [0.03, 0.3]] },
+} };
 // role order = node order; the first role is the root
 for (const t of Object.values(TEMPLATES)) t.order = Object.keys(t.roles);
 

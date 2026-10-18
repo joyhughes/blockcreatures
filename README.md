@@ -108,7 +108,7 @@ truncated past that, since truncation would break the symmetry.
 `tools/symdyn.mjs` that twins move as mirror or rotated images.
 
 **Animal templates**: *Snake*, *Quadruped*, *Insect*, *Arachnid*,
-*Crustacean*, *Centipede* and *Biped* are bilateral body plans whose genome graph is fixed
+*Crustacean*, *Centipede*, *Biped*, *Centaur* and *Ducktopus* are bilateral body plans whose genome graph is fixed
 (`TEMPLATES` in `src/genome.js`). Each node has a role, and the role fixes
 what the node attaches to, on which face, how often a chain may repeat
 (within a range), which joints it may have, and the range of its size.
@@ -129,6 +129,8 @@ matching roles. Grafting swaps one role's node for the other parent's.
 | Crustacean | carapace with ten legs with hip and knee, the front pair ending in pincers; head with antennae (1–4 segments); optional segmented tail (2–6) |
 | Centipede | head with optional pincers; 3–8 segments with two legs each, with hip and knee |
 | Biped | upright torso; two legs with hip, knee and ankle, ending in a flat foot; optional head, two-joint arms and tail (1–5) |
+| Centaur | a horse's body, spine and withers on four legs with hip and knee, each ending in a hoof (fused); optional tail (2–5); a human waist (1–2 segments) and chest rising from the withers, with a head and two arms with the biped's hands |
+| Ducktopus | an octopus's mantle on eight arms (3–6 tapering segments), four low on each side fanned fore and aft; a duck's head with a flat bill on a neck (1–3); optional tail feathers (a blade) |
 
 Insect, arachnid, crustacean and centipede legs have knees: the upper leg
 leaves the body roughly level and the lower leg bends down from it. The

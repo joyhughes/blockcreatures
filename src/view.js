@@ -106,6 +106,8 @@ export class View {
     this.stairMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: 0.85 });
     // slalom gate panels: racing red, so they stand out on the snow
     this.gateMat = new THREE.MeshStandardMaterial({ color: 0xd8262c, roughness: 0.6 });
+    // ski jumping: the hill's snow
+    this.snowMat = new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.9, side: THREE.DoubleSide });
     // cooperation: the goal, a ring with a faint disc, flat on the ground
     this.goalMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     this.goalFill = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false });
@@ -185,10 +187,13 @@ export class View {
     // stairs: each cell holds its whole flight
     const flight = sims[0].statics ? Math.max(...sims.map(s => Math.max(0, ...(s.statics || []).map(b => Math.abs(b.c[0]) + b.h[0])))) : 0;
     const gap = pair ? Math.max(9, this.arena + 3) : flight ? 2 * flight + 1 : Math.max(3, 2.6 * big);
+    // ski jumping: hills side by side (across, Z), never end to end
+    const hills = !!sims[0].hillPts;
     const cols = Math.ceil(Math.sqrt(sims.length));
     this.gridSize = gap * cols;
     sims.forEach((sim, k) => {
-      const off = crowd ? new THREE.Vector3((k % cols - (cols - 1) / 2) * gap, 0, (Math.floor(k / cols) - (Math.ceil(sims.length / cols) - 1) / 2) * gap) : new THREE.Vector3();
+      const off = !crowd ? new THREE.Vector3() : hills ? new THREE.Vector3(0, 0, (k - (sims.length - 1) / 2) * 6)
+        : new THREE.Vector3((k % cols - (cols - 1) / 2) * gap, 0, (Math.floor(k / cols) - (Math.ceil(sims.length / cols) - 1) / 2) * gap);
       const cell = { sim, off, meshes: [] };
       this.cells.push(cell);
       this.addCreatures(cell);
@@ -199,6 +204,24 @@ export class View {
       }
       cell.k = k;
       this.addCube(cell);
+      // ski jumping: the hill, a snow strip along its profile
+      if (sim.hillPts) {
+        const P = sim.hillPts, W = 2.5, pos = [], idx = [];
+        P.forEach(([x, y]) => pos.push(x, y, -W, x, y, W));
+        for (let i = 0; i + 1 < P.length; i++) { const a = 2 * i; idx.push(a, a + 1, a + 2, a + 2, a + 1, a + 3); }
+        // its sides, down to the ground
+        const n0 = pos.length / 3;
+        P.forEach(([x, y]) => pos.push(x, y, -W, x, 0, -W, x, y, W, x, 0, W));
+        for (let i = 0; i + 1 < P.length; i++) { const a = n0 + 4 * i; idx.push(a, a + 4, a + 1, a + 1, a + 4, a + 5, a + 2, a + 3, a + 6, a + 6, a + 3, a + 7); }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setIndex(idx); geo.computeVertexNormals();
+        this.owned.push(geo);
+        const m = new THREE.Mesh(geo, this.snowMat);
+        m.position.copy(off);
+        m.receiveShadow = true;
+        this.add(m);
+      }
       for (const b of sim.statics || []) {
         const geo = new THREE.BoxGeometry(2 * b.h[0], 2 * b.h[1], 2 * b.h[2]);
         this.owned.push(geo);

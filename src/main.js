@@ -6,7 +6,7 @@ import { makeRng } from './math.js';
 import { Recorder } from './record.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1', ski: 'm/s downhill', spin: 'turns', throw: 'm thrown' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1', ski: 'm/s downhill', spin: 'turns', throw: 'm thrown', skijump: 'points' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -53,7 +53,7 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', buoyancy: 'scBuoyancy', start: 'scStart',
   strength: 'scStrength', toneMin: 'scToneMin', levelMin: 'scLevelMin', braceMin: 'scBraceMin',
-  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', gait: 'scGait', spinShape: 'scSpinShape', slalom: 'scSlalom', gateGap: 'scGateGap', gateOffset: 'scGateOffset', gateWidth: 'scGateWidth', implMass: 'scImplMass', throwShape: 'scThrowShape', hill: 'scHill', skiDrag: 'scSkiDrag', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
+  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', gait: 'scGait', spinShape: 'scSpinShape', slalom: 'scSlalom', gateGap: 'scGateGap', gateOffset: 'scGateOffset', gateWidth: 'scGateWidth', gateBonus: 'scGateBonus', gateHit: 'scGateHit', jumpInrun: 'scJumpInrun', jumpLength: 'scJumpLength', jumpTakeoff: 'scJumpTakeoff', jumpLanding: 'scJumpLanding', jumpLand: 'scJumpLand', grab: 'scGrab', grabOnly: 'scGrabOnly', skates: 'scSkates', implMass: 'scImplMass', throwShape: 'scThrowShape', hill: 'scHill', skiDrag: 'scSkiDrag', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
   grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether',
   stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing', engage: 'scEngage', bothSides: 'scBothSides' };
@@ -114,6 +114,8 @@ const PLAN_NOTES = {
   crustacean: 'Animal template: a carapace with ten legs (hip and knee), the front pair ending in pincers; a head with antennae; an optional segmented tail.',
   centipede: 'Animal template: a head with optional pincers and a chain of 3–8 segments with a pair of legs (hip and knee) on each.',
   biped: 'Animal template: an upright torso on two legs (hip, knee and ankle), with an optional head, arms and tail. Arms end in hands on two-way wrists: three fingers of hinged segments that close toward the palm, and a thumb that swings across to oppose them. The Biped walking target always uses it.',
+  centaur: 'Animal template: a horse\'s body on four legs (hip and knee) ending in hooves, an optional tail, and a human torso rising from the withers with a head and two arms, their hands the biped\'s (three hinged fingers and an opposable thumb).',
+  ducktopus: 'Animal template: an octopus\'s mantle on eight arms (chains of 3–6 tapering segments), four down each side fanned fore and aft, with a duck\'s head and flat bill on a neck of 1–3 segments, and optional tail feathers.',
 };
 // a target that needs one body plan (biped walking) uses it whatever is picked
 const effPlan = () => TASKS[task].plan || planType;
@@ -835,7 +837,16 @@ function hudText(finalFit) {
   if (sim.coop) s += sim.scored !== null ? ` · GOAL at ${sim.scored.toFixed(1)}s` : sim.tStart !== null ? ` · ball ${sim.ballToGoal().toFixed(2)} m from the goal` : '';
   if (sim.lift && sim.cube && sim.tStart !== null) s += ` · weight ${Math.max(0, sim.cube.translation().y - sim.ballR).toFixed(2)} m up`;
   if (sim.gates && sim.track[0]?.gates) s += ` · gates ${sim.track[0].gates.map(x => (x ? '✓' : '✗')).join(' ')}`;
-  if (sim.throw && sim.tStart !== null) s += ` · best throw ${sim.throw.best.toFixed(2)} m${sim.throw.flight ? ' · in flight' : ''}`;
+  if (sim.hillPts && sim.track[0]?.jump) {
+    const j = sim.track[0].jump;
+    s += j.phase === 'inrun' ? ' · inrun' : j.phase === 'air' ? ` · in the air, took off at ${j.v.toFixed(1)} m/s` : j.phase === 'landing' ? ` · landed at ${j.dist.toFixed(2)} m, holding it`
+      : j.phase === 'landed' ? ` · ${j.dist.toFixed(2)} m, landed on its skis` : j.dist !== undefined ? ` · ${j.dist.toFixed(2)} m, fell (${j.why || 'crashed'})` : ` · fell on the inrun (${j.why || 'crashed'})`;
+  }
+  if (sim.throw && sim.tStart !== null && sim.scene.grab) {
+    const th = sim.throw;
+    s += th.knocked ? ' · knocked it away: no score' : th.armed ? ' · held up: throw armed' : th.up > 0 ? ` · holding it up ${th.up.toFixed(1)}s` : th.handTouch ? ' · touched it' : '';
+  }
+  if (sim.throw && sim.tStart !== null && !sim.scene.grabOnly) s += ` · best throw ${sim.throw.best.toFixed(2)} m${sim.throw.flight ? ' · in flight' : ''}`;
   if (sim.task.kind === 'spin' && sim.track[0]?.best !== undefined) s += ` · best landed ${sim.track[0].best.toFixed(2)} turns${sim.track[0].air ? ' · in the air' : ''}`;
   if (sim.statics && sim.tStart !== null && sim.creatures[0].valid) s += ` · lowest part ${Math.max(0, sim.creatures[0].lowest()).toFixed(2)} m up`;
   if (T.kind === 'upright' && sim.track[0]) { const f = sim.track[0].fell; s += f === undefined ? ' · upright' : f < T.settle ? ' · fell while settling' : ` · fell at ${(f - T.settle).toFixed(1)}s`; }
