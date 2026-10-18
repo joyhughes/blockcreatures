@@ -108,6 +108,8 @@ export class View {
     this.gateMat = new THREE.MeshStandardMaterial({ color: 0xd8262c, roughness: 0.6 });
     // ski jumping: the hill's snow
     this.snowMat = new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.9, side: THREE.DoubleSide });
+    // cross-country: the course's terrain, the groomed trail tinted
+    this.trailMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 });
     // cooperation: the goal, a ring with a faint disc, flat on the ground
     this.goalMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     this.goalFill = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false });
@@ -190,10 +192,13 @@ export class View {
     const gap = pair ? Math.max(9, this.arena + 3) : flight ? 2 * flight + 1 : Math.max(3, 2.6 * big);
     // ski jumping: hills side by side (across, Z), never end to end
     const hills = !!sims[0].hillPts;
+    // cross-country course: everyone on the one course, racing as ghosts
+    const course = sims[0].course;
+    this.ground.position.y = course ? course.lo - 0.05 : 0;
     const cols = Math.ceil(Math.sqrt(sims.length));
     this.gridSize = gap * cols;
     sims.forEach((sim, k) => {
-      const off = !crowd ? new THREE.Vector3() : hills ? new THREE.Vector3(0, 0, (k - (sims.length - 1) / 2) * 6)
+      const off = !crowd || course ? new THREE.Vector3() : hills ? new THREE.Vector3(0, 0, (k - (sims.length - 1) / 2) * 6)
         : new THREE.Vector3((k % cols - (cols - 1) / 2) * gap, 0, (Math.floor(k / cols) - (Math.ceil(sims.length / cols) - 1) / 2) * gap);
       const cell = { sim, off, meshes: [] };
       this.cells.push(cell);
@@ -223,7 +228,8 @@ export class View {
         m.receiveShadow = true;
         this.add(m);
       }
-      for (const b of sim.statics || []) {
+      if (course && k === 0) this.addCourse(sim);
+      for (const b of (course && k ? [] : sim.statics || [])) {
         const geo = new THREE.BoxGeometry(2 * b.h[0], 2 * b.h[1], 2 * b.h[2]);
         this.owned.push(geo);
         const m = new THREE.Mesh(geo, b.gate ? this.gateMat : this.stairMat);
@@ -377,6 +383,34 @@ export class View {
     sp.renderOrder = 10;
     sp.userData.own = true;
     return sp;
+  }
+
+  // cross-country: the course's terrain as Rapier has it (its heightfield's
+  // grid, each cell split corner to corner), the trail a pale blue
+  addCourse(sim) {
+    const c = sim.course, N = c.nz + 1, pos = [], col = [], idx = [], w = (sim.scene.courseWidth ?? 3) / 2;
+    const snow = new THREE.Color(0xf4f7fb), trail = new THREE.Color(0xc9dcf0);
+    for (let j = 0; j <= c.nx; j++) for (let i = 0; i <= c.nz; i++) {
+      const x = c.x0 + j * c.cell, z = c.z0 + i * c.cell;
+      pos.push(x, c.H[j * N + i], z);
+      let d = Infinity;
+      for (let k = 0; k < c.P.length; k += 5) d = Math.min(d, (c.P[k].x - x) ** 2 + (c.P[k].z - z) ** 2);
+      // (eased over a cell either side of the edge)
+      const f = x < c.P[c.i0].x - 0.5 ? 0 : Math.max(0, Math.min(1, (w - Math.sqrt(d)) / (2 * c.cell) + 0.5)), col0 = snow.clone().lerp(trail, f);
+      col.push(col0.r, col0.g, col0.b);
+    }
+    for (let j = 0; j < c.nx; j++) for (let i = 0; i < c.nz; i++) {
+      const a = j * N + i, b = a + N;
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.setIndex(idx); geo.computeVertexNormals();
+    this.owned.push(geo);
+    const m = new THREE.Mesh(geo, this.trailMat);
+    m.receiveShadow = true;
+    this.add(m);
   }
 
   // what the camera follows: the cube in competition, else the creature, or

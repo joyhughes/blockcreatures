@@ -101,6 +101,10 @@ export const TASKS = {
   // edges); grip wax (or scales) stops a ski sliding back; only the skis
   // may touch the snow
   crossCountry: { label: 'Cross-country skiing', env: 'land', duration: 10, settle: 1, trials: 1, kind: 'ski', scene: { settle: 'timed', friction: 0.05, hill: -2, skiDrag: 0.002, wax: 0.5 } },
+  // cross-country on a real trail (Sim.buildCourse): climbs, descents and
+  // bends, marked by poles either side; as far along the trail as it gets
+  // without falling, and no further once it strays off it
+  xcCourse: { label: 'Cross-country course', env: 'land', duration: 20, settle: 1, trials: 1, kind: 'ski', scene: { settle: 'timed', friction: 0.05, hill: 0, skiDrag: 0.002, wax: 0.5, course: true } },
   // skiing round gates: as skiing, but distance past a missed gate doesn't count
   slalom: { label: 'Slalom', env: 'land', duration: 10, settle: 1, trials: 1, kind: 'ski', scene: { settle: 'timed', friction: 0.08, slalom: 2 } },
   // ski jumping: skis on the feet, at the top of a real hill (Sim.buildJump):
@@ -173,6 +177,11 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 //              once the landing is held)
 //   jumpLand   ski jumping: extra points for landing on its skis and holding it JUMP.hold s
 //              (distance scores a point per JUMP.per m)
+//   course     skiing: a cross-country trail (COURSE) over real terrain, a heightfield, in place of
+//              the tilted flat (hill is ignored); distance is along the trail, and stops counting
+//              where the centre of mass first strays more than courseWidth/2 off its middle.
+//              courseHills, courseTurns: the climbs' and descents' heights, and the bends' angles,
+//              as multiples of COURSE's (0 = flat, straight)
 //   wax        skiing: grip wax (or fishscales): a ski sliding back along its line grips, up to
 //              wax x its share of the weight; forward it runs free (cross-country). 0 = none
 //   bladesOnly skiing and speed skating: only the skis or blades may touch the snow or ice (a
@@ -236,7 +245,7 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 export const SCENE = {
   duration: null, gravity: 9.81, friction: 3.0, drag: 3, lightDist: 6, buoyancy: 1.5, start: 'side',
   strength: 1, toneMin: 0, levelMin: 0, braceMin: 0, toneRate: 8, reflexRate: 6, jointDamp: 3, jointRange: 1.6,
-  joints: 'limited', falls: true, standWeight: 0.1, stepWeight: 0.1, knockMass: 2, speed: 'net', forward: true, hill: 8, skiDrag: 0.3, gait: 'none', spinShape: 0.1, slalom: 0, gateGap: 3.5, gateOffset: 0.8, gateWidth: 1.6, gateBonus: 0.2, gateHit: 0.1, jumpInrun: 35, jumpLength: 10, jumpTakeoff: 11, jumpLanding: 35, jumpLand: 0.5, jumpHeight: 0.6, jumpKick: 0, jumpRide: 0.5, grab: false, grabOnly: false, skates: false, bladesOnly: true, wax: 0, implMass: 0.05, throwShape: 0.1,
+  joints: 'limited', falls: true, standWeight: 0.1, stepWeight: 0.1, knockMass: 2, speed: 'net', forward: true, hill: 8, skiDrag: 0.3, gait: 'none', spinShape: 0.1, slalom: 0, gateGap: 3.5, gateOffset: 0.8, gateWidth: 1.6, gateBonus: 0.2, gateHit: 0.1, jumpInrun: 35, jumpLength: 10, jumpTakeoff: 11, jumpLanding: 35, jumpLand: 0.5, jumpHeight: 0.6, jumpKick: 0, jumpRide: 0.5, grab: false, grabOnly: false, skates: false, bladesOnly: true, wax: 0, course: false, courseHills: 1, courseTurns: 1, courseWidth: 3, implMass: 0.05, throwShape: 0.1,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
   stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
@@ -313,6 +322,67 @@ const GATE = { panel: [0.03, 0.7, 0.3] };
 // landing must be held on the skis alone, the shaping for getting down the
 // inrun without falling (its share of the way to the edge)
 const JUMP = { top: 2.5, at: 1.5, r1: 12, table: 2, rk: 6, drop: 0.15, r2: 15, land: 28, r3: 15, w: 5, seg: 0.5, thick: 1, over: 1, per: 10, hold: 1, ride: 3, shape: 0.1 };
+// cross-country trail: its sections, [length m, bend degrees (+ = left),
+// rise m], each rise eased in (smoothstep: the steepest pitch 1.5x the
+// average); a flat run-up behind the start; the trail sampled every `step`
+// m; the terrain a heightfield of `cell` m squares, `margin` m beyond the
+// trail, each point's height a soft blend (sigma m) of the nearest trail's;
+// marker poles every `pole` m either side
+const COURSE = {
+  sections: [[3, 0, 0], [4, 0, 0.35], [2, 30, 0], [4, 0, -0.45], [5, -60, 0], [4, 0, 0.4], [3, 40, -0.3], [4, 0, 0], [5, 0, 0.5], [5, -45, -0.6], [6, 0, 0]],
+  back: 4, step: 0.05, cell: 0.25, margin: 5, sigma: 1, pole: 2.5, poleHalf: [0.02, 0.5, 0.02],
+};
+const courses = new Map();
+// the trail's samples (x, z, height, heading, station) and the terrain's
+// heights, cached per shape (every evaluation builds the same one)
+function courseFor(sc) {
+  const hills = sc.courseHills ?? 1, turns = sc.courseTurns ?? 1, key = hills + ',' + turns;
+  if (courses.has(key)) return courses.get(key);
+  const D = Math.PI / 180, st = COURSE.step, P = [];
+  let x = -COURSE.back, z = 0, th = 0, h = 0, s = -COURSE.back;
+  const put = () => P.push({ x, z, h, ux: Math.cos(th), uz: -Math.sin(th), s });
+  for (let d = 0; d < COURSE.back - 1e-9; d += st) { put(); x += st; s += st; }
+  for (const [L, bend, rise] of COURSE.sections) {
+    const n = Math.round(L / st), h0 = h;
+    for (let i = 0; i < n; i++) {
+      put();
+      th += bend * turns * D / n;
+      x += st * Math.cos(th); z -= st * Math.sin(th); s += st;
+      const f = (i + 1) / n; h = h0 + rise * hills * f * f * (3 - 2 * f);
+    }
+  }
+  put();
+  // the terrain
+  const m = COURSE.margin, cell = COURSE.cell;
+  const x0 = Math.min(...P.map(p => p.x)) - m, x1 = Math.max(...P.map(p => p.x)) + m;
+  const z0 = Math.min(...P.map(p => p.z)) - m, z1 = Math.max(...P.map(p => p.z)) + m;
+  const nx = Math.ceil((x1 - x0) / cell), nz = Math.ceil((z1 - z0) / cell);
+  const H = new Float32Array((nx + 1) * (nz + 1)), few = P.filter((p, i) => i % 5 === 0), k2 = 1 / (2 * COURSE.sigma ** 2);
+  let lo = Infinity;
+  for (let j = 0; j <= nx; j++) for (let i = 0; i <= nz; i++) {
+    const gx = x0 + j * cell, gz = z0 + i * cell;
+    let dmin = Infinity;
+    const d2 = few.map(p => { const d = (p.x - gx) ** 2 + (p.z - gz) ** 2; if (d < dmin) dmin = d; return d; });
+    let sw = 0, sh = 0;
+    few.forEach((p, k) => { const w = Math.exp(-(d2[k] - dmin) * k2); sw += w; sh += w * p.h; });
+    // (Rapier's layout: column-major, rows along Z)
+    lo = Math.min(lo, H[j * (nz + 1) + i] = sh / sw);
+  }
+  // the trail's middle follows the terrain under it
+  const c = { P, H, nx, nz, x0, z0, cell, lo, i0: Math.round(COURSE.back / st) };
+  for (const p of P) p.h = courseHeight(c, p.x, p.z).y;
+  courses.set(key, c);
+  return c;
+}
+// the terrain's height and upward normal at (x, z), bilinear in its cell
+function courseHeight(c, x, z) {
+  const fx = Math.max(0, Math.min(c.nx - 1e-6, (x - c.x0) / c.cell)), fz = Math.max(0, Math.min(c.nz - 1e-6, (z - c.z0) / c.cell));
+  const j = Math.floor(fx), i = Math.floor(fz), u = fx - j, v = fz - i, N = c.nz + 1;
+  const a = c.H[j * N + i], b = c.H[(j + 1) * N + i], d = c.H[j * N + i + 1], e = c.H[(j + 1) * N + i + 1];
+  const y = a * (1 - u) * (1 - v) + b * u * (1 - v) + d * (1 - u) * v + e * u * v;
+  const hx = ((b - a) * (1 - v) + (e - d) * v) / c.cell, hz = ((d - a) * (1 - u) + (e - b) * u) / c.cell, l = Math.hypot(hx, 1, hz);
+  return { y, n: [-hx / l, 1 / l, -hz / l] };
+}
 const SPIN = { hold: 0.5, fallen: 0.1, minAir: 0.1, iceTurns: 5, air: 0.5 };
 const SKI_ROLES = ['foot', 'paw', 'lowerLeg', 'frontLower', 'clawLower', 'hoof'];
 // a ducktopus skis (and skates) on the tips of its arms
@@ -1365,7 +1435,9 @@ export class Sim {
     // relaxed with its muscles off lies on its belly before it starts.
     this.relaxing = land && sc.settle === 'stable' && !(sc.falls && genomes.every(g => TEMPLATES[g.plan?.type]));
     // skiing: gravity tilts downhill (+X) by the hill angle, on flat ground
-    this.hill = task.kind === 'ski' ? (sc.hill || 0) * Math.PI / 180 : 0;
+    // (a cross-country course has real terrain instead)
+    this.course = task.kind === 'ski' && sc.course ? courseFor(sc) : null;
+    this.hill = task.kind === 'ski' && !this.course ? (sc.hill || 0) * Math.PI / 180 : 0;
     this.gx = this.g * Math.sin(this.hill);
     if (this.hill) this.g *= Math.cos(this.hill);
     const world = this.world = new RAPIER.World({ x: this.gx, y: -this.g, z: 0 });
@@ -1380,7 +1452,13 @@ export class Sim {
     // passes: most silent quadrupeds drift a few cm, and 11 of 12 stay up
     // instead of 4 (about 30% slower). Scenes from before keep one pass.
     world.integrationParameters.numInternalPgsIterations = sc.joints === 'old' ? 1 : PHYS.frictionPasses;
-    if (land) {
+    if (land && this.course) {
+      // the course's terrain is the ground
+      const c = this.course;
+      this.groundCol = world.createCollider(RAPIER.ColliderDesc.heightfield(c.nz, c.nx, c.H, { x: c.nx * c.cell, y: 1, z: c.nz * c.cell }, RAPIER.HeightFieldFlags.FIX_INTERNAL_EDGES)
+        .setTranslation(c.x0 + c.nx * c.cell / 2, 0, c.z0 + c.nz * c.cell / 2).setFriction(this.relaxing ? 0 : sc.friction));
+      this.groundHandle = this.groundCol.handle;
+    } else if (land) {
       // an analytic half-space: Rapier's box-vs-cylinder contacts are its
       // least robust, and spinning cylinders on a box floor gained energy
       this.groundCol = world.createCollider(new RAPIER.ColliderDesc(new RAPIER.HalfSpace({ x: 0, y: 1, z: 0 })).setFriction(this.relaxing ? 0 : sc.friction));
@@ -1444,6 +1522,7 @@ export class Sim {
       }
       if (task.kind === 'climb') this.buildStairs();
       if (task.kind === 'ski' && sc.slalom > 0) this.buildGates();
+      if (this.course) this.buildCourse();
       if (task.kind === 'throw') this.buildThrow();
       // lifting: the cube appears when measuring starts (addBall), so the
       // creature can't settle onto it; its height over the last LIFT_HOLD s
@@ -1645,6 +1724,30 @@ export class Sim {
       const col = this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(g.x, hy, cz).setSensor(true));
       this.staticCols.push(col); this.gateCols.add(col.handle); this.gateOf.set(col.handle, this.gates.indexOf(g));
     }
+  }
+
+  // Cross-country course: marker poles either side of the trail, every
+  // COURSE.pole m, courseWidth apart; sensors (seen, not felt), which the
+  // eyes see as salient, as slalom gates
+  buildCourse() {
+    const c = this.course, w = (this.scene.courseWidth ?? 3) / 2, [hx, hy, hz] = COURSE.poleHalf, every = Math.round(COURSE.pole / COURSE.step);
+    this.statics ??= []; this.staticCols ??= []; this.markCols = new Set();
+    for (let k = c.i0 + every; k < c.P.length; k += every) for (const sd of [-1, 1]) {
+      const p = c.P[k], x = p.x - sd * p.uz * w, z = p.z + sd * p.ux * w, y = courseHeight(c, x, z).y + hy;
+      this.statics.push({ c: [x, y, z], h: [hx, hy, hz], gate: true });
+      const col = this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, hy, hz).setTranslation(x, y, z).setSensor(true));
+      this.staticCols.push(col); this.markCols.add(col.handle);
+    }
+  }
+  courseAt(x, z) { return courseHeight(this.course, x, z); }
+  // where (x, z) is along the trail: the nearest sample within 3 m of
+  // sample k; its station, and how far off the middle
+  courseStation(x, z, k) {
+    const P = this.course.P;
+    let best = k, bd = Infinity;
+    for (let i = Math.max(0, k - 60); i < Math.min(P.length, k + 61); i++) { const d = (P[i].x - x) ** 2 + (P[i].z - z) ** 2; if (d < bd) { bd = d; best = i; } }
+    const p = P[best];
+    return { k: best, s: p.s, off: Math.abs((x - p.x) * -p.uz + (z - p.z) * p.ux) };
   }
 
   // Ski jumping: the hill's profile in X (downhill) and Y: a straight start
@@ -1851,7 +1954,7 @@ export class Sim {
     (tr.past ??= []).push(this.snap(tr));
     if (tr.past.length > FALL_BACK * 10) tr.past.shift();
   }
-  snap(tr) { return { t: this.t, maxDist: tr.maxDist, last: tr.last, low: tr.low, gates: tr.gates && [...tr.gates], hits: tr.hits && [...tr.hits], cap: tr.cap, mark: tr.mark, minY: tr.minY, yMark: tr.yMark, minYMark: tr.minYMark }; }
+  snap(tr) { return { t: this.t, maxDist: tr.maxDist, last: tr.last, low: tr.low, gates: tr.gates && [...tr.gates], hits: tr.hits && [...tr.hits], cap: tr.cap, s: tr.s, mark: tr.mark, minY: tr.minY, yMark: tr.yMark, minYMark: tr.minYMark }; }
 
   // walking with falls: steps. A foot (a foot part's body: a paw and its
   // toes are one) that leaves the ground for STEP_AIR s and lands STEP_LEN
@@ -1957,7 +2060,8 @@ export class Sim {
   // frontal area (the bounding box seen along the motion) x v^2, so tucking
   // low and narrow is faster.
   skiEdges(c) {
-    if (this.hillPts) return this.hillEdges(c);
+    if (this.hillPts) return this.hillEdges(c, (x, z) => this.hillAt(x));
+    if (this.course) return this.hillEdges(c, (x, z) => this.courseAt(x, z));
     const hy = s => (this.scene.bladesOnly ? s.half[1] : SKI.half[1]);   // (tall skis and blades)
     const on = c.skis.filter(s => { const b = c.bodies[s.body], q = b.rotation(), t = b.translation(), p = add([t.x, t.y, t.z], qrot(q, s.at)); return p[1] < 2 * hy(s) + 0.01; });
     const cap = on.length ? SKI.grip * c.totalMass * this.g * DT / on.length : 0;
@@ -1980,15 +2084,15 @@ export class Sim {
     this.airDrag(c);
   }
 
-  // skiing's edges on the jumping hill: as skiEdges, with "on the snow" and
-  // "sideways" taken from the hill's surface under each ski (its normal n:
-  // sideways = n x the ski's axis), the cap from the weight's share pressing
-  // into the slope
-  hillEdges(c) {
-    const on = [];
+  // skiing's edges on real snow (the jumping hill, a cross-country course):
+  // as skiEdges, with "on the snow" and "sideways" taken from the surface
+  // under each ski, surf(x, z) (its normal n: sideways = n x the ski's axis),
+  // the cap from the weight's share pressing into the slope
+  hillEdges(c, surf) {
+    const on = [], wax = this.scene.wax || 0;
     for (const s of c.skis) {
       const b = c.bodies[s.body], q = b.rotation(), t = b.translation(), p = add([t.x, t.y, t.z], qrot(q, s.at));
-      const { y, n } = this.hillAt(p[0]);
+      const { y, n } = surf(p[0], p[2]);
       if ((p[1] - y) * n[1] < 2 * (this.scene.bladesOnly ? s.half[1] : SKI.half[1]) + 0.01) on.push({ s, b, q, p, n });
     }
     for (const { s, b, q, p, n } of on) {
@@ -1999,6 +2103,11 @@ export class Sim {
       const v = add(c.bv[s.body], cross(c.bw[s.body], sub(p, c.bc[s.body])));
       const vs = dot(v, side), J = Math.max(-cap, Math.min(cap, -vs * c.mass[s.body]));
       b.applyImpulseAtPoint(V(scale(side, J)), V(p), true);
+      // grip wax, as skiEdges: along the ski in the snow's plane
+      if (wax > 0) {
+        const fwd = cross(side, n), va = dot(v, fwd);
+        if (va < 0) b.applyImpulseAtPoint(V(scale(fwd, Math.min(wax * cap / SKI.grip, -va * c.mass[s.body]))), V(p), true);
+      }
     }
     this.airDrag(c);
   }
@@ -2035,7 +2144,7 @@ export class Sim {
 
   // what an eye sees as salient: the prize (ball, cube or barbell) or another creature's body
   salient(h, i, col) {
-    if (col !== undefined && this.gateCols?.has(col)) return true;
+    if (col !== undefined && (this.gateCols?.has(col) || this.markCols?.has(col))) return true;
     if (this.cube && this.cube.handle === h) return true;
     if (this.pend && this.pend.ball.handle === h) return true;
     return this.creatures.some((c, k) => k !== i && c.valid && c.bodies.some(b => b.handle === h));
@@ -2129,7 +2238,8 @@ export class Sim {
           }
         }
         const up = qrot(c.partPose(0).q, qrot(qconj(c.partQ[0]), [0, 1, 0]))[1];
-        const low = tr.y0 !== undefined && c.com()[1] < FALL_LOW * tr.y0;
+        // (on a course, the height above the snow under it; it starts on the flat at 0)
+        const cm = c.com(), low = tr.y0 !== undefined && cm[1] - (this.course ? this.courseAt(cm[0], cm[2]).y : 0) < FALL_LOW * tr.y0;
         // sliding: the slowest foot on the ground is the creature's anchor,
         // and however far the anchor itself slides is subtracted. A planted
         // foot (walking, shuffling) slides nowhere; when every foot skids, as
@@ -2374,6 +2484,13 @@ export class Sim {
         const k = this.gateOf.get(o.handle);
         if (k !== undefined) (tr.hits ??= [])[k] = true;
       });
+      // course: along the trail; past where it first strayed off, no more counts
+      if (this.course) {
+        const st = this.courseStation(p[0], p[2], tr.ci ?? this.course.i0);
+        tr.ci = st.k; tr.s = st.s;
+        if (tr.s0 === undefined) tr.s0 = st.s;
+        if (st.off > (this.scene.courseWidth ?? 3) / 2 && tr.cap === undefined) tr.cap = st.s;
+      }
       if (!tr.start) { tr.start = p; if (this.scene.skates) tr.fwd = this.facing(c) || [1, 0, 0]; }
       tr.last = p;
       if (this.walkFalls) this.keepPast(tr);
@@ -2593,8 +2710,8 @@ export class Sim {
         const stand = 0.5 * up + 0.5 * Math.max(0, Math.min(1, tr.h0 || 0));
         if (!tr.start || !tr.last) return (this.scene.standWeight ?? 0.1) * stand;
         const d = sub(tr.last, tr.start);
-        let dist = this.hill ? d[0] : this.scene.skates && tr.fwd ? dot(d, tr.fwd) : len(d);
-        if (tr.cap !== undefined) dist = Math.min(dist, tr.cap - tr.start[0]);   // slalom: up to the missed gate
+        let dist = this.course ? (tr.s ?? 0) - (tr.s0 ?? 0) : this.hill ? d[0] : this.scene.skates && tr.fwd ? dot(d, tr.fwd) : len(d);
+        if (tr.cap !== undefined) dist = Math.min(dist, tr.cap - (this.course ? tr.s0 : tr.start[0]));   // slalom: up to the missed gate (course: where it strayed)
         // slalom: gateBonus for each gate passed through its opening before
         // the first miss, less gateHit for each gate whose panels it touched
         let gates = 0;
