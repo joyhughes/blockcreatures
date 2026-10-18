@@ -123,6 +123,7 @@ export class View {
     this.eyeMat = new THREE.MeshStandardMaterial({ color: 0xf4f1e8, roughness: 0.3 });
     this.pupilMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2 });
     this.tmpV = new THREE.Vector3();
+    this.tmpQ = new THREE.Quaternion();
     this.edgeGeo = new THREE.EdgesGeometry(this.boxGeo);
     this.focus = new THREE.Vector3();
     this.labels = true;
@@ -431,25 +432,61 @@ export class View {
       cell.cube.geometry = sim.ballSphere ? this.ballGeo : this.cubeGeo;
       cell.cube.material = sim.ballSphere ? this.ballMat : this.cubeMat;
       cell.cube.scale.setScalar(sim.ballR);
+      cell.cube.userData.prev = null;
     }
   }
 
-  update() {
+  // a mesh's pose in the sim now
+  meshPose(sim, m) {
+    const { creature, part, body } = m.userData, cr = sim.creatures[creature];
+    if (body !== undefined) { const b = cr.bodies[body], t = b.translation(); return { c: [t.x, t.y, t.z], q: b.rotation() }; }
+    return cr.partPose(part);
+  }
+
+  // Drawing between physics steps: just before a frame's last step, each
+  // mesh's pose is kept, and update(alpha) draws it alpha of the way from
+  // there to the pose after the step (alpha: the share of the next step the
+  // clock has already run). Drawn at whole steps, a fast creature (a ski
+  // jumper at 10 m/s: 17 cm a step) juddered, moving on some frames and
+  // not others (a 120 Hz screen gets a step every other frame).
+  capture() {
+    for (const cell of this.cells) {
+      const { sim } = cell;
+      for (const m of cell.meshes) {
+        const { c, q } = this.meshPose(sim, m);
+        m.userData.prev = { c: c.slice(), q: new THREE.Quaternion(q.x, q.y, q.z, q.w), step: sim.steps };
+      }
+      if (cell.cube && sim.cube) {
+        const t = sim.cube.translation(), r = sim.cube.rotation();
+        cell.cube.userData.prev = { c: [t.x, t.y, t.z], q: new THREE.Quaternion(r.x, r.y, r.z, r.w), step: sim.steps };
+      }
+    }
+  }
+
+  // set obj to pose (c, q) moved by off, or alpha of the way there from its
+  // kept pose, if that is from the step before this one
+  place(obj, sim, c, q, off, alpha) {
+    const pr = obj.userData.prev;
+    obj.quaternion.set(q.x, q.y, q.z, q.w);
+    if (pr && alpha < 1 && pr.step === sim.steps - 1) {
+      obj.quaternion.slerpQuaternions(pr.q, this.tmpQ.copy(obj.quaternion), alpha);
+      c = c.map((x, k) => pr.c[k] + (x - pr.c[k]) * alpha);
+    }
+    obj.position.set(c[0] + off.x, c[1] + off.y, c[2] + off.z);
+  }
+
+  update(alpha = 1) {
     for (const cell of this.cells) {
       const { sim, off } = cell;
       for (const m of cell.meshes) {
-        const { creature, part, local, body } = m.userData;
-        const cr = sim.creatures[creature];
-        const { c, q } = body === undefined ? cr.partPose(part) : (b => { const t = b.translation(); return { c: [t.x, t.y, t.z], q: b.rotation() }; })(cr.bodies[body]);
-        m.quaternion.set(q.x, q.y, q.z, q.w);
-        m.position.set(c[0] + off.x, c[1] + off.y, c[2] + off.z);
-        if (local) m.position.add(this.tmpV.fromArray(local).applyQuaternion(m.quaternion));
+        const { c, q } = this.meshPose(sim, m);
+        this.place(m, sim, c, q, off, alpha);
+        if (m.userData.local) m.position.add(this.tmpV.fromArray(m.userData.local).applyQuaternion(m.quaternion));
       }
       if (sim.cube && !cell.cube) this.addCube(cell);
       if (cell.cube) {
         const t = sim.cube.translation(), r = sim.cube.rotation();
-        cell.cube.position.set(t.x + off.x, t.y + off.y, t.z + off.z);
-        cell.cube.quaternion.set(r.x, r.y, r.z, r.w);
+        this.place(cell.cube, sim, [t.x, t.y, t.z], r, off, alpha);
       }
       // knocked down: the pendulum, a ball on a rope, while it hangs
       if (sim.pend && !cell.pend) {

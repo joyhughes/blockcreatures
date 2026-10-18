@@ -601,10 +601,10 @@ export function mutate(g, rng, amount = 1.5, opts) {
   const tpl = TEMPLATES[g.plan?.type];
   // where the eyes sit: front (binocular) to sides (wide field)
   if (rng.chance(rate * 2)) g.eyes = { spread: clamp((g.eyes?.spread ?? EYE_SPREAD) + rng.gauss() * 0.15, 0, 1) };
-  // a quadruped's canned gait, fitted to its body (sim.js GAITS, scene gait):
+  // a quadruped's or centaur's canned gait, fitted to its body (sim.js GAITS, scene gait):
   // stride rate, hip swing, knee lift, back flex, each 0..1 (absent = 0.5)
   // (a fixed chance: at the genome's site rate, about 1 mutant in 100 changed it)
-  if (g.plan?.type === 'quadruped' && rng.chance(0.2)) {
+  if ((g.plan?.type === 'quadruped' || g.plan?.type === 'centaur') && rng.chance(0.2)) {
     const t = { ...(g.gait || {}) };
     for (const k of ['hz', 'swing', 'lift', 'spine']) t[k] = clamp((t[k] ?? 0.5) + rng.gauss() * 0.15, 0, 1);
     g.gait = t;

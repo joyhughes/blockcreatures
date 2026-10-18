@@ -7,7 +7,7 @@
 //      MIGRATE=n generations between migrations (default 30, 0 = never),
 //      MIN_ARM=k require an appendage at least k segments long,
 //      SEED_FROM=<file with a .genome, or a run file> start from mutants of that creature (a run's best),
-//      TRAINED=1 (biped, quadruped) start from the trained walker in starters/<plan>.json,
+//      TRAINED=1 (biped, quadruped, centaur) start from the trained walker in starters/<plan>.json,
 //        lightly mutated, so it can already stand and walk,
 //      REQUIRE=role,role optional template parts every creature keeps (e.g. upperArm),
 //      SCENE=<json> scene overrides (sim.js SCENE), LEGACY=1 the old cube scene,

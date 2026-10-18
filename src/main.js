@@ -53,7 +53,7 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', buoyancy: 'scBuoyancy', start: 'scStart',
   strength: 'scStrength', toneMin: 'scToneMin', levelMin: 'scLevelMin', braceMin: 'scBraceMin',
-  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', gait: 'scGait', spinShape: 'scSpinShape', slalom: 'scSlalom', gateGap: 'scGateGap', gateOffset: 'scGateOffset', gateWidth: 'scGateWidth', gateBonus: 'scGateBonus', gateHit: 'scGateHit', jumpInrun: 'scJumpInrun', jumpLength: 'scJumpLength', jumpTakeoff: 'scJumpTakeoff', jumpLanding: 'scJumpLanding', jumpLand: 'scJumpLand', grab: 'scGrab', grabOnly: 'scGrabOnly', skates: 'scSkates', implMass: 'scImplMass', throwShape: 'scThrowShape', hill: 'scHill', skiDrag: 'scSkiDrag', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
+  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', gait: 'scGait', spinShape: 'scSpinShape', slalom: 'scSlalom', gateGap: 'scGateGap', gateOffset: 'scGateOffset', gateWidth: 'scGateWidth', gateBonus: 'scGateBonus', gateHit: 'scGateHit', jumpInrun: 'scJumpInrun', jumpLength: 'scJumpLength', jumpTakeoff: 'scJumpTakeoff', jumpLanding: 'scJumpLanding', jumpLand: 'scJumpLand', jumpHeight: 'scJumpHeight', jumpKick: 'scJumpKick', jumpRide: 'scJumpRide', grab: 'scGrab', grabOnly: 'scGrabOnly', skates: 'scSkates', bladesOnly: 'scBladesOnly', wax: 'scWax', implMass: 'scImplMass', throwShape: 'scThrowShape', hill: 'scHill', skiDrag: 'scSkiDrag', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
   grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether',
   stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing', engage: 'scEngage', bothSides: 'scBothSides' };
@@ -119,11 +119,11 @@ const PLAN_NOTES = {
 };
 // a target that needs one body plan (biped walking) uses it whatever is picked
 const effPlan = () => TASKS[task].plan || planType;
-// Trained walkers (starters/<plan>.json): a biped and a quadruped already
+// Trained walkers (starters/<plan>.json): a biped, a quadruped and a centaur already
 // evolved to stand and walk, for runs that start from one instead of from
 // random creatures.
 const STARTERS = {};
-for (const p of ['biped', 'quadruped']) fetch(`starters/${p}.json`).then(r => r.json()).then(c => { STARTERS[p] = c; showPlan(); }).catch(() => {});
+for (const p of ['biped', 'quadruped', 'centaur']) fetch(`starters/${p}.json`).then(r => r.json()).then(c => { STARTERS[p] = c; showPlan(); }).catch(() => {});
 const trainedOn = () => $('trained').checked && !!STARTERS[effPlan()];
 function body() {
   const plan = effPlan() === 'radial' ? { type: 'radial', n: +$('radialN').value } : { type: effPlan() };
@@ -794,6 +794,7 @@ function frame(now) {
     slowed = false;
     while (acc >= DT && n < 16) {
       if (allDone()) break;
+      if (acc - DT < DT) view.capture();   // the frame's last step: keep the poses to draw from
       for (const s of sims) if (!s.done) s.step();
       acc -= DT; n++;
       // a big crowd plays slower rather than freezing the page
@@ -817,7 +818,7 @@ function frame(now) {
       $('hudSub').textContent = hudText();
     }
   }
-  if (live) view.update();
+  if (live) view.update(allDone() || now <= pauseUntil ? 1 : Math.min(1, acc / DT));
   $('hudTitle').textContent = replay ? `${TASKS[rtask()].label} · ${replay.label}${replay.cells?.[replay.focus] ? ' › ' + replay.cells[replay.focus].label : ''}` : TASKS[task].label;
   if (!replay) $('hudSub').textContent = 'Press Evolve to start a run.';
   view.render();
@@ -840,7 +841,8 @@ function hudText(finalFit) {
   if (sim.hillPts && sim.track[0]?.jump) {
     const j = sim.track[0].jump;
     s += j.phase === 'inrun' ? ' · inrun' : j.phase === 'air' ? ` · in the air, took off at ${j.v.toFixed(1)} m/s` : j.phase === 'landing' ? ` · landed at ${j.dist.toFixed(2)} m, holding it`
-      : j.phase === 'landed' ? ` · ${j.dist.toFixed(2)} m, landed on its skis` : j.dist !== undefined ? ` · ${j.dist.toFixed(2)} m, fell (${j.why || 'crashed'})` : ` · fell on the inrun (${j.why || 'crashed'})`;
+      : j.phase === 'riding' ? ` · ${j.dist.toFixed(2)} m, landed, riding out ${j.ride.toFixed(1)}s`
+      : j.phase === 'landed' ? ` · ${j.dist.toFixed(2)} m, landed on its skis${j.ride !== undefined ? (j.why ? `, fell ${j.ride.toFixed(1)}s into the ride out (${j.why})` : `, rode it out`) : ''}` : j.dist !== undefined ? ` · ${j.dist.toFixed(2)} m, fell (${j.why || 'crashed'})` : ` · fell on the inrun (${j.why || 'crashed'})`;
   }
   if (sim.throw && sim.tStart !== null && sim.scene.grab) {
     const th = sim.throw;
