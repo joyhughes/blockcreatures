@@ -495,6 +495,16 @@ export class View {
         cell.cube.userData.prev = { c: [t.x, t.y, t.z], q: new THREE.Quaternion(r.x, r.y, r.z, r.w), step: sim.steps };
       }
     }
+    // the camera's target too, for skiing's locked camera
+    const g = this.cells.length ? this.goal() : null;
+    this.goalPrev = g ? { v: g, step: this.cells[0].sim.steps } : null;
+  }
+
+  // skiers and ski jumpers move too fast for an easing camera: it stays
+  // centred on them instead
+  locked() {
+    const k = this.cells[0]?.sim.task.kind;
+    return k === 'ski' || k === 'skijump';
   }
 
   // set obj to pose (c, q) moved by off, or alpha of the way there from its
@@ -556,7 +566,12 @@ export class View {
     const goal = this.goal();
     if (goal) {
       const prev = this.focus.clone();
-      this.focus.lerp(goal, this.wantDist !== undefined ? 0.2 : 0.08);   // faster while zooming
+      if (this.locked()) {
+        // between steps, like the meshes (else it judders)
+        const gp = this.goalPrev;
+        if (gp && alpha < 1 && gp.step === this.cells[0].sim.steps - 1) goal.lerpVectors(gp.v, goal, alpha);
+        this.focus.copy(goal);
+      } else this.focus.lerp(goal, this.wantDist !== undefined ? 0.2 : 0.08);   // faster while zooming
       const delta = this.focus.clone().sub(prev);
       this.camera.position.add(delta);
       this.controls.target.copy(this.focus);
