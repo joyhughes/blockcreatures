@@ -28,18 +28,18 @@ const rtask = () => (replay && replay.task) || task;
 let sim = null, sims = [], pauseUntil = 0;   // sim = sims[0], the one the HUD reports
 let pendingGen = -1;          // newer generation waiting for the replay to finish
 
-// ---------------------------------------------------------------- task buttons
-for (const [key, t] of Object.entries(TASKS)) {
-  const b = document.createElement('button');
-  b.textContent = t.label;
-  b.dataset.task = key;
-  b.onclick = () => { if (!running) setTask(key); };
-  $('tasks').append(b);
+// ---------------------------------------------------------------- task menu
+for (const [key, t] of Object.entries(TASKS).sort((a, b) => a[1].label.localeCompare(b[1].label))) {
+  const o = document.createElement('option');
+  o.textContent = t.label;
+  o.value = key;
+  $('tasks').append(o);
 }
+$('tasks').onchange = () => { if (running) $('tasks').value = task; else setTask($('tasks').value); };
 
 function setTask(key) {
   task = key;
-  for (const b of $('tasks').children) b.classList.toggle('on', b.dataset.task === key);
+  $('tasks').value = key;
   $('sUnit').textContent = 'best ' + UNITS[TASKS[key].kind];
   view.setEnv(TASKS[key].env);
   showPlan();
@@ -53,7 +53,7 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', buoyancy: 'scBuoyancy', start: 'scStart',
   strength: 'scStrength', toneMin: 'scToneMin', levelMin: 'scLevelMin', braceMin: 'scBraceMin',
-  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', gait: 'scGait', spinShape: 'scSpinShape', slalom: 'scSlalom', gateGap: 'scGateGap', gateOffset: 'scGateOffset', gateWidth: 'scGateWidth', gateBonus: 'scGateBonus', gateHit: 'scGateHit', jumpInrun: 'scJumpInrun', jumpLength: 'scJumpLength', jumpTakeoff: 'scJumpTakeoff', jumpLanding: 'scJumpLanding', jumpLand: 'scJumpLand', jumpHeight: 'scJumpHeight', jumpKick: 'scJumpKick', jumpRide: 'scJumpRide', grab: 'scGrab', grabOnly: 'scGrabOnly', skates: 'scSkates', bladesOnly: 'scBladesOnly', wax: 'scWax', course: 'scCourse', courseHills: 'scCourseHills', courseTurns: 'scCourseTurns', courseWidth: 'scCourseWidth', implMass: 'scImplMass', throwShape: 'scThrowShape', hill: 'scHill', skiDrag: 'scSkiDrag', boardMass: 'scBoardMass', boardLean: 'scBoardLean', boardRoll: 'scBoardRoll', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
+  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', gait: 'scGait', spinShape: 'scSpinShape', slalom: 'scSlalom', gateGap: 'scGateGap', gateOffset: 'scGateOffset', gateWidth: 'scGateWidth', gateBonus: 'scGateBonus', gateHit: 'scGateHit', jumpInrun: 'scJumpInrun', jumpLength: 'scJumpLength', jumpTakeoff: 'scJumpTakeoff', jumpLanding: 'scJumpLanding', jumpLand: 'scJumpLand', jumpHeight: 'scJumpHeight', jumpKick: 'scJumpKick', jumpRide: 'scJumpRide', grab: 'scGrab', grabOnly: 'scGrabOnly', skates: 'scSkates', bladesOnly: 'scBladesOnly', wax: 'scWax', course: 'scCourse', courseHills: 'scCourseHills', courseTurns: 'scCourseTurns', courseWidth: 'scCourseWidth', implMass: 'scImplMass', throwShape: 'scThrowShape', hill: 'scHill', skiDrag: 'scSkiDrag', boardMass: 'scBoardMass', boardLean: 'scBoardLean', boardRoll: 'scBoardRoll', boardFit: 'scBoardFit', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
   grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether',
   stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing', engage: 'scEngage', bothSides: 'scBothSides' };
@@ -155,16 +155,19 @@ function teamName(k, ev = evolver) {
   return `${k ? 'team B' : 'team A'} (${planName(k ? rb.plan : ev.body.plan)})`;
 }
 function showPlan() {
-  for (const b of $('plan').children) b.classList.toggle('on', b.dataset.plan === effPlan());
+  // (a target with its own body plan, as biped walking, fixes the menu)
+  $('plan').value = effPlan();
+  $('plan').disabled = running || !!TASKS[task].plan;
+  $('plan').title = $('plan').selectedOptions[0]?.title || '';
   $('nWrap').hidden = effPlan() !== 'radial';
   $('trainedWrap').hidden = !STARTERS[effPlan()];
   $('planNote').textContent = PLAN_NOTES[effPlan()] + ($('round').checked ? ' Round parts: genes may choose capsules or spheres; capsules lie along the attachment axis, so recursive chains taper into tentacles.' : '')
     + (+$('minArm').value ? ` Min arm: only creatures with an appendage of at least ${$('minArm').value} segments are viable.` : '')
     + (trainedOn() ? ` Trained walker: the run starts from ${STARTERS[effPlan()].about}, lightly mutated, instead of from random creatures.` : '');
 }
-for (const b of $('plan').children) b.onclick = () => { if (running || TASKS[task].plan) return; planType = b.dataset.plan; showPlan(); switchRun(); };
+$('plan').onchange = () => { if (running || TASKS[task].plan) { showPlan(); return; } planType = $('plan').value; showPlan(); switchRun(); };
 $('radialN').onchange = $('round').onchange = $('minArm').onchange = $('trained').onchange = () => { if (running) return; showPlan(); switchRun(); };
-const setBodyEnabled = on => { for (const el of [...$('plan').children, $('radialN'), $('round'), $('minArm'), $('trained'), $('islands'), $('teams'), $('planB')]) el.disabled = !on; };
+const setBodyEnabled = on => { for (const el of [$('plan'), $('radialN'), $('round'), $('minArm'), $('trained'), $('islands'), $('teams'), $('planB')]) el.disabled = !on; };
 
 // Each target and body plan (arm count and round-parts setting included) has
 // its own run: evolution stays within the plan, and switching plans keeps the
@@ -236,8 +239,9 @@ async function evolveLoop() {
 $('go').onclick = () => {
   running = !running;
   $('go').textContent = running ? 'Pause' : 'Evolve';
-  for (const b of $('tasks').children) b.disabled = running;
+  $('tasks').disabled = running;
   setBodyEnabled(!running);
+  showPlan();
   if (running) loopDone = evolveLoop();
 };
 $('reset').onclick = () => { if (running) $('go').click(); newRun(); loadChampion(); };
@@ -656,7 +660,7 @@ $('seedFrom').onclick = () => {
   const g = replay.genome;
   if (rtask() !== task) {
     task = rtask();
-    for (const b of $('tasks').children) b.classList.toggle('on', b.dataset.task === task);
+    $('tasks').value = task;
     $('sUnit').textContent = 'best ' + UNITS[TASKS[task].kind];
   }
   planType = g.plan?.type || 'free';
@@ -704,7 +708,7 @@ function loadRun(d, name) {
   if (running) $('go').click();
   if (d.task && d.task !== task) {
     task = d.task;
-    for (const b of $('tasks').children) b.classList.toggle('on', b.dataset.task === task);
+    $('tasks').value = task;
     $('sUnit').textContent = 'best ' + UNITS[TASKS[task].kind];
   }
   $('pop').value = d.popSize || d.pop?.length || 300;
@@ -850,7 +854,8 @@ function hudText(finalFit) {
   }
   if (sim.throw && sim.tStart !== null && !sim.scene.grabOnly) s += ` · best throw ${sim.throw.best.toFixed(2)} m${sim.throw.flight ? ' · in flight' : ''}`;
   if (sim.board && sim.tStart !== null && sim.t >= sim.tStart && sim.track[0]) {
-    const tr = sim.track[0], d = tr.start && tr.last ? Math.max(0, (tr.last[0] - tr.start[0]) * tr.fwd[0] + (tr.last[2] - tr.start[2]) * tr.fwd[2]) : 0;
+    const tr = sim.track[0], d0 = tr.start && tr.last ? (tr.last[0] - tr.start[0]) * tr.fwd[0] + (tr.last[2] - tr.start[2]) * tr.fwd[2] : 0;
+    const d = sim.scene.boardFit === 'stance' && !sim.hill ? Math.abs(d0) : Math.max(0, d0);
     s += ` · ${d.toFixed(2)} m` + (tr.off ? ' · stepped off the board' : tr.fell !== undefined ? ` · fell at ${(tr.fell - sim.tStart).toFixed(1)}s` : tr.offFor > 0 ? ' · off the board' : ' · riding') + ` · rolling ${(tr.rolled || 0).toFixed(1)}s`;
   }
   if (sim.task.kind === 'spin' && sim.track[0]?.best !== undefined) s += ` · best landed ${sim.track[0].best.toFixed(2)} turns${sim.track[0].air ? ' · in the air' : ''}`;

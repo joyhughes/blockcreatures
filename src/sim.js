@@ -216,6 +216,12 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 //              side's wheels (trucks: lean right and the board turns right), in proportion to
 //              the imbalance; 0 = straight on
 //   boardRoll  skateboarding: the wheels' rolling resistance, a share of the load on them
+//   boardFit   skateboarding: 'stance' = the board fits the creature as a real board fits a rider:
+//              the deck about a tenth of its height up, its side edges under the outer feet's
+//              middles (easy to step off and push), and a creature whose feet stand side by side
+//              (a biped) turned a quarter turn to stand across it, as skaters do; on the flat,
+//              riding either way along the board counts. 'feet' (runs before) = a deck 11 cm up
+//              covering every foot with a margin, a metre or more wide under a sprawling insect
 //   skiDrag    skiing: air drag, N per (m/s)^2 per m^2 of frontal area: tucking low pays
 //   forward    net speed, animal templates on land: only distance in the direction it faced when
 //              measuring began counts (head first; a quadruped evolved to walk rump-first)
@@ -262,7 +268,7 @@ export const SCENE = {
   duration: null, gravity: 9.81, friction: 3.0, drag: 3, lightDist: 6, buoyancy: 1.5, start: 'side',
   strength: 1, toneMin: 0, levelMin: 0, braceMin: 0, toneRate: 8, reflexRate: 6, jointDamp: 3, jointRange: 1.6,
   joints: 'limited', falls: true, standWeight: 0.1, stepWeight: 0.1, knockMass: 2, speed: 'net', forward: true, hill: 8, skiDrag: 0.3, gait: 'none', spinShape: 0.1, slalom: 0, gateGap: 3.5, gateOffset: 0.8, gateWidth: 1.6, gateBonus: 0.2, gateHit: 0.1, jumpInrun: 35, jumpLength: 10, jumpTakeoff: 11, jumpLanding: 35, jumpLand: 0.5, jumpHeight: 0.6, jumpKick: 0, jumpRide: 0.5, grab: false, grabOnly: false, skates: false, bladesOnly: true, wax: 0, course: false, courseHills: 1, courseTurns: 1, courseWidth: 3, implMass: 0.05, throwShape: 0.1,
-  boardMass: 0.25, boardLean: 15, boardRoll: 0.01,
+  boardMass: 0.25, boardLean: 15, boardRoll: 0.01, boardFit: 'stance',
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
   stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
@@ -274,7 +280,7 @@ export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene |
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0, joints: 'old', falls: false, friction: 1, speed: 'sims', forward: false, gateBonus: 0, gateHit: 0, grab: false, grabOnly: false, jumpRide: 0, bladesOnly: false };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0, joints: 'old', falls: false, friction: 1, speed: 'sims', forward: false, gateBonus: 0, gateHit: 0, grab: false, grabOnly: false, jumpRide: 0, bladesOnly: false, boardFit: 'feet' };
   const legacy = NEW_KINDS.includes(TASKS[taskName].kind) ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -466,6 +472,30 @@ function inv3(m) {
   return [[A0 * k, (c * h - b * i) * k, (b * f - c * e) * k], [B0 * k, (a * i - c * g) * k, (c * d - a * f) * k], [C0 * k, (b * g - a * h) * k, (a * e - b * d) * k]];
 }
 const mulM = (m, v) => m.map(r => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
+// skateboarding: a creature's feet (part indices), in its built pose: an
+// animal's real feet (REAL_FEET, at any height: a centaur's forehooves hang
+// 35 cm up as built and land as it settles); for older animals without
+// them, its template's ground parts but tails and flukes; otherwise the
+// parts on the ground as built (`feet`)
+function boardFeet(genome, parts, feet) {
+  const roles = TEMPLATES[genome.plan?.type]?.roles, role = k => genome.nodes[parts[k].node].role;
+  let f = roles ? parts.map((p, k) => (REAL_FEET.includes(role(k)) ? k : -1)).filter(k => k >= 0) : [];
+  if (roles && !f.length) f = parts.map((p, k) => { const r = roles[role(k)]; return r?.ground && !r.prop && role(k) !== 'tail' && role(k) !== 'fluke' ? k : -1; }).filter(k => k >= 0);
+  return f.length ? f : [...feet];
+}
+// skateboarding (boardFit 'stance'): a creature whose feet stand further
+// apart side to side than fore and aft (a biped) is turned a quarter turn,
+// so it stands across the board (which points along X), as skaters do
+function stanceYaw(genome) {
+  const { parts } = develop(genome);
+  if (!parts.length) return 0;
+  let minY = Infinity;
+  for (const p of parts) minY = Math.min(minY, p.center[1] - support(p, p.R, [0, 1, 0]));
+  const low = new Set(parts.map((p, k) => (p.center[1] - support(p, p.R, [0, 1, 0]) <= minY + 0.03 ? k : -1)).filter(k => k >= 0));
+  const f = boardFeet(genome, parts, low);
+  const span = a => Math.max(...f.map(k => parts[k].center[a])) - Math.min(...f.map(k => parts[k].center[a]));
+  return span(2) > span(0) ? Math.PI / 2 : 0;
+}
 
 // light position for a follow trial: spread around the creature
 export function lightPos(task, trial, phase = 0, FOLLOW_DIST = SCENE.lightDist) {
@@ -1542,7 +1572,7 @@ export class Sim {
     } else {
       // ski jumping: the hill first, the creature on its inrun, tilted to the slope
       const jump = task.kind === 'skijump' ? this.buildJump() : null;
-      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, ground: land, float: this.surface ? sc.buoyancy : 0, skis: jump ? { ...(sc.bladesOnly ? SKI_TALL : SKI), round: true } : task.kind === 'ski' ? (sc.skates ? (sc.bladesOnly ? SPEED_BLADE : SPEED_SKATE) : sc.bladesOnly ? SKI_TALL : SKI) : task.kind === 'spin' ? SKATE : null,
+      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, yaw: task.kind === 'skate' && sc.boardFit === 'stance' ? stanceYaw(g) : 0, ground: land, float: this.surface ? sc.buoyancy : 0, skis: jump ? { ...(sc.bladesOnly ? SKI_TALL : SKI), round: true } : task.kind === 'ski' ? (sc.skates ? (sc.bladesOnly ? SPEED_BLADE : SPEED_SKATE) : sc.bladesOnly ? SKI_TALL : SKI) : task.kind === 'spin' ? SKATE : null,
         plane: jump?.plane, tilt: jump ? jump.tilt : task.kind === 'getup' ? START_POSE[sc.start] || START_POSE.side : null,
         gait: land && (task.kind === 'speed' || task.kind === 'upright') ? sc.gait : null,
       }));
@@ -1755,31 +1785,47 @@ export class Sim {
   buildBoard() {
     const sc = this.scene, c = this.creatures[0], B = BOARD;
     if (!c?.valid) return;
-    // the feet: an animal's real feet (REAL_FEET, at any height: a
-    // centaur's forehooves hang 35 cm up as built and land as it settles);
-    // for older animals without them, their template's ground parts but
-    // tails and flukes; otherwise the parts on the ground as built
-    const roles = TEMPLATES[c.genome.plan?.type]?.roles, role = k => c.genome.nodes[c.parts[k].node].role;
-    let feet = roles ? c.parts.map((p, k) => (REAL_FEET.includes(role(k)) ? k : -1)).filter(k => k >= 0) : [];
-    if (roles && !feet.length) feet = c.parts.map((p, k) => { const r = roles[role(k)]; return r?.ground && !r.prop && role(k) !== 'tail' && role(k) !== 'fluke' ? k : -1; }).filter(k => k >= 0);
-    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
-    for (const k of (feet.length ? feet : c.feet)) {
+    const feet = boardFeet(c.genome, c.parts, c.feet), stance = sc.boardFit === 'stance';
+    // feet's outer extents (x0..x1, z0..z1), their middles' (cx, cz), and
+    // their mean half extents (fx, fz)
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, fx = 0, fz = 0;
+    const cx = [Infinity, -Infinity], cz = [Infinity, -Infinity];
+    for (const k of feet) {
       const { c: pc, q } = c.partPose(k), p = c.parts[k];
       const axes = [qrot(q, [1, 0, 0]), qrot(q, [0, 1, 0]), qrot(q, [0, 0, 1])];
       const ex = support(p, axes, [1, 0, 0]), ez = support(p, axes, [0, 0, 1]);
       x0 = Math.min(x0, pc[0] - ex); x1 = Math.max(x1, pc[0] + ex);
       z0 = Math.min(z0, pc[2] - ez); z1 = Math.max(z1, pc[2] + ez);
+      cx[0] = Math.min(cx[0], pc[0]); cx[1] = Math.max(cx[1], pc[0]); cz[0] = Math.min(cz[0], pc[2]); cz[1] = Math.max(cz[1], pc[2]);
+      fx += ex / feet.length; fz += ez / feet.length;
     }
-    if (!(x1 > x0)) { const com = c.com(); x0 = x1 = com[0]; z0 = z1 = com[2]; }
-    const hx = Math.max(B.minHalf[0], (x1 - x0) / 2 + B.margin[0]), hz = Math.max(B.minHalf[1], (z1 - z0) / 2 + B.margin[1]);
-    const top = 2 * B.wheel + B.clear + 2 * B.deck, y = top - B.deck;
+    if (!(x1 > x0)) { const com = c.com(); x0 = x1 = cx[0] = cx[1] = com[0]; z0 = z1 = cz[0] = cz[1] = com[2]; }
+    let hx, hz, dh, r, clear, inset;
+    if (stance) {
+      // fitted to the stance, sized to the creature (standY, its centre of
+      // mass's height as built): a person's board (0.8 x 0.2 m, 10 cm up)
+      // is 0.8 x 0.2 x 0.1 of that, roughly. Along the board the feet are on
+      // to their ends; across it, the edges run under the outer feet's
+      // middles, half of each foot over the side, so it steps off easily
+      // (a sprawling insect still needs a deck as wide as its stance)
+      const h = c.standY;
+      hx = Math.max(0.08, 0.3 * h, (cx[1] - cx[0]) / 2 + fx);
+      hz = Math.max(0.03, 0.1 * h, (cz[1] - cz[0]) / 2);
+      const top0 = Math.max(0.03, Math.min(0.11, 0.1 * h));
+      r = 0.32 * top0; clear = 0.14 * top0; dh = Math.max(0.004, 0.11 * top0); inset = 1.7 * r;
+    } else {
+      hx = Math.max(B.minHalf[0], (x1 - x0) / 2 + B.margin[0]); hz = Math.max(B.minHalf[1], (z1 - z0) / 2 + B.margin[1]);
+      r = B.wheel; clear = B.clear; dh = B.deck; inset = B.inset;
+    }
+    const top = 2 * r + clear + 2 * dh, y = top - dh;
     c.shift([0, top + 0.002, 0]);
-    const M = (sc.boardMass ?? 0.25) * c.totalMass, r = B.wheel;
-    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation((x0 + x1) / 2, y, (z0 + z1) / 2).setCanSleep(false));
-    const deck = this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, B.deck, hz).setDensity(0.8 * M / (8 * hx * B.deck * hz))
+    const M = (sc.boardMass ?? 0.25) * c.totalMass;
+    const at0 = stance ? [(cx[0] + cx[1]) / 2, y, (cz[0] + cz[1]) / 2] : [(x0 + x1) / 2, y, (z0 + z1) / 2];
+    const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(...at0).setCanSleep(false));
+    const deck = this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, dh, hz).setDensity(0.8 * M / (8 * hx * dh * hz))
       .setFriction(sc.friction).setRestitution(0), body);
-    const ax = Math.max(0.6 * hx, hx - B.inset), az = Math.max(0.03, hz - 0.6 * r), wy = r - y;
-    this.barbell = [{ box: [hx, B.deck, hz], at: [0, 0, 0], deck: true }];
+    const ax = Math.max(0.6 * hx, hx - inset), az = Math.max(stance ? 0.6 * hz : 0.03, hz - 0.6 * r), wy = r - y;
+    this.barbell = [{ box: [hx, dh, hz], at: [0, 0, 0], deck: true }];
     const wheels = [];
     for (const sx of [1, -1]) for (const sz of [1, -1]) {
       const at = [sx * ax, wy, sz * az];
@@ -1788,7 +1834,7 @@ export class Sim {
       this.barbell.push({ box: [r, r, 0.6 * r], at, wheel: true });
     }
     this.cube = body; this.ballSphere = false; this.ballR = hx;
-    this.board = { body, deck, wheels, ax, wy, hx, hz, handles: new Set([deck.handle, ...wheels.map(w => w.handle)]) };
+    this.board = { body, deck, wheels, ax, wy, hx, hz, r, top, handles: new Set([deck.handle, ...wheels.map(w => w.handle)]) };
     c.groundExtra = this.board.handles;
   }
 
@@ -1830,7 +1876,7 @@ export class Sim {
     const kAt = (p, u) => { const rn = cross(sub(p, com), u); return 1 / mass + dot(rn, mulM(Ii, rn)); };
     [1, -1].forEach((sgn, i) => {
       if (!(load[i] > 0)) return;
-      const p = add(add(o, qrot(q, [sgn * bd.ax, bd.wy, 0])), [0, -BOARD.wheel, 0]);
+      const p = add(add(o, qrot(q, [sgn * bd.ax, bd.wy, 0])), [0, -bd.r, 0]);
       const a = sgn * d, u = add(scale(fx, Math.cos(a)), scale(sx, Math.sin(a))), n = [-u[2], 0, u[0]];
       const cap = BOARD.grip * load[i];
       const vs = dot(velAt(p), n);
@@ -2909,6 +2955,7 @@ export class Sim {
         const stand = (this.scene.standWeight ?? 0.1) * (0.5 * up + 0.5 * Math.max(0, Math.min(1, tr.h0 || 0)));
         if (!tr.start || !tr.last) return stand;
         let dist = dot(sub(tr.last, tr.start), tr.fwd);
+        if (this.scene.boardFit === 'stance' && !this.hill) dist = Math.abs(dist);   // (on the flat the board has no front)
         if (tr.cap !== undefined) dist = Math.min(dist, tr.cap - tr.start[0]);   // slalom: up to the missed gate
         return Math.max(0, Math.max(0, dist) / T + this.gatePoints(tr)) + stand;
       }

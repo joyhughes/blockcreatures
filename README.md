@@ -527,10 +527,21 @@ creature that does is fallen, and scores only for standing. Under that rule
 the best of the first runs is a biped that rides its skis the whole way
 (8.1 m in 10 s).
 
-**Skateboarding** (targets): the board is a separate body, a deck on
-four wheels, sized to span the creature's feet as built (an animal's real
-feet, wherever they hang: a centaur's forehooves are 35 cm up until it
-settles), weighing *Board mass* × the creature (0.25). The creature is
+**Skateboarding** (targets): the board is a separate body, a deck on four
+wheels, fitted to the creature's stance as a real board fits a rider (Scene:
+*Board fit*): the deck about a tenth of its centre of mass's height off the
+ground (4 cm under an insect, 10 cm under a biped), long enough for the
+feet fore and aft, with its side edges under the middles of the outer feet,
+so a foot steps off it to push with a small move. A creature whose feet
+stand side by side (a biped) is turned a quarter turn to stand across the
+board, as skaters do, and on the flat riding either way along it counts.
+The feet are an animal's real feet wherever they hang (a centaur's
+forehooves are 35 cm up until it settles). The first version covered every
+foot with a margin, 11 cm up whatever the creature's size: under sprawling
+insects the deck was over a metre wide and a third of their height up, and
+they couldn't get a leg over the side; runs from then keep that board
+(*Cover the feet*). Sprawlers still need a deck as wide as their stance.
+The board weighs *Board mass* × the creature (0.25). The creature is
 lifted onto it and settles there with the wheels braked. The wheels are
 balls with no friction of their own; each step, each axle on the ground has
 its sideways velocity at the ground taken out, up to the load its wheels

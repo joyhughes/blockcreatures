@@ -12,4 +12,4 @@ for (const t of Object.keys(TASKS)) {
 const file = 'runs/baseline.json';
 if (process.argv[2] === 'save' || !existsSync(file)) writeFileSync(file, JSON.stringify(out));
 const base = JSON.parse(readFileSync(file));
-for (const t in out) console.log(t.padEnd(12), out[t].toFixed(6), out[t] === base[t] ? 'same' : `CHANGED (was ${base[t].toFixed(6)})`);
+for (const t in out) console.log(t.padEnd(12), out[t].toFixed(6), base[t] === undefined ? 'new (not in the baseline)' : out[t] === base[t] ? 'same' : `CHANGED (was ${base[t].toFixed(6)})`);

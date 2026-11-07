@@ -33,10 +33,7 @@
   h1 { font-size: 16px; margin: 0 0 2px; letter-spacing: .02em; }
   .lede { color: var(--muted); margin: 0 0 12px; }
   h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
-  .tasks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .tasks button { text-align: left; padding: 7px 9px; }
-  .tasks button.on, .seg button.on { border-color: var(--accent); color: #fff; background: #2a2618; }
-  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  select.menu { width: 100%; padding: 7px 9px; }
   button, select, input { font: inherit; color: var(--text); background: #232831; border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; }
   button { cursor: pointer; }
   button:hover { border-color: #46505e; }
@@ -99,23 +96,23 @@
   <p class="lede">Evolving virtual creatures after Karl Sims (1994): morphology and neural control evolved together as directed graphs.</p>
 
   <h2>Evolutionary target</h2>
-  <div class="tasks" id="tasks"></div>
+  <select id="tasks" class="menu" title="What the creatures are scored on"></select>
 
   <h2>Body plan</h2>
-  <div class="seg" id="plan">
-    <button data-plan="free" class="on" title="Sims' original: any shape, per-connection reflection">Free</button>
-    <button data-plan="bilateral" title="Mirror-symmetric about a midplane">Bilateral</button>
-    <button data-plan="radial" title="N-fold rotational symmetry about a vertical axis">Radial</button>
-    <button data-plan="snake" title="Animal template: head, body chain, tail">Snake</button>
-    <button data-plan="quadruped" title="Animal template (Gait, under Scene, drives its legs in a canned walk, trot, canter, gallop or run): four two-joint legs with five-toed paws; head (optional neck, trunk); optional tail; optional fin or fluke on the tail and trunk tips; optional dorsal fin">Quadruped</button>
-    <button data-plan="insect" title="Animal template: six legs with knees; head (optional antennae, mandibles); abdomen (optional stinger)">Insect</button>
-    <button data-plan="arachnid" title="Animal template: eight legs with knees (optional front pincers); head (optional mandibles); optional tail with stinger">Arachnid</button>
-    <button data-plan="crustacean" title="Animal template: ten legs with knees, pincers on the front pair; head with antennae; optional tail">Crustacean</button>
-    <button data-plan="centipede" title="Animal template: head (optional pincers) and repeating segments with two kneed legs each">Centipede</button>
-    <button data-plan="biped" title="Animal template: upright torso on two legs; optional head, arms (with hands: three jointed fingers and an opposable thumb), tail">Biped</button>
-    <button data-plan="centaur" title="Animal template: horse body on four kneed legs with hooves; optional tail; human torso with head and two arms with hands">Centaur</button>
-    <button data-plan="ducktopus" title="Animal template: octopus mantle on eight segmented arms; duck head and bill on a neck; optional tail feathers">Ducktopus</button>
-  </div>
+  <select id="plan" class="menu">
+    <option value="arachnid" title="Animal template: eight legs with knees (optional front pincers); head (optional mandibles); optional tail with stinger">Arachnid</option>
+    <option value="bilateral" title="Mirror-symmetric about a midplane">Bilateral</option>
+    <option value="biped" title="Animal template: upright torso on two legs; optional head, arms (with hands: three jointed fingers and an opposable thumb), tail">Biped</option>
+    <option value="centaur" title="Animal template: horse body on four kneed legs with hooves; optional tail; human torso with head and two arms with hands">Centaur</option>
+    <option value="centipede" title="Animal template: head (optional pincers) and repeating segments with two kneed legs each">Centipede</option>
+    <option value="crustacean" title="Animal template: ten legs with knees, pincers on the front pair; head with antennae; optional tail">Crustacean</option>
+    <option value="ducktopus" title="Animal template: octopus mantle on eight segmented arms; duck head and bill on a neck; optional tail feathers">Ducktopus</option>
+    <option value="free" title="Sims' original: any shape, per-connection reflection" selected>Free</option>
+    <option value="insect" title="Animal template: six legs with knees; head (optional antennae, mandibles); abdomen (optional stinger)">Insect</option>
+    <option value="quadruped" title="Animal template (Gait, under Scene, drives its legs in a canned walk, trot, canter, gallop or run): four two-joint legs with five-toed paws; head (optional neck, trunk); optional tail; optional fin or fluke on the tail and trunk tips; optional dorsal fin">Quadruped</option>
+    <option value="radial" title="N-fold rotational symmetry about a vertical axis">Radial</option>
+    <option value="snake" title="Animal template: head, body chain, tail">Snake</option>
+  </select>
   <div class="row" style="margin-top:8px">
     <label id="nWrap" hidden>Arms <select id="radialN"><option>3</option><option>4</option><option selected>5</option><option>6</option><option>8</option></select></label>
     <label title="Genes may choose capsules and spheres as well as boxes; chains of capsules become tentacles"><input type="checkbox" id="round"> Round parts</label>
@@ -130,7 +127,7 @@
     <label>Seed <input type="number" id="seed" value="1" min="1"></label>
     <label title="Sub-populations that select and mate separately; each island's best migrates to the next every 10 generations. 1 = Sims' single population">Islands <select id="islands"><option>1</option><option>2</option><option>4</option><option selected>6</option><option>8</option><option>12</option></select></label>
     <label data-kind="compete cooperate volley wrestle" title="One population: every creature plays with or against the population's own best of the previous generation. Two teams: two species that never interbreed, each paired with the other team's best of the previous generation (in competition, Sims' interspecies competition), so they keep adapting to each other. The orange creature is the one being shown; team B's best is under Show">Teams <select id="teams"><option value="1">one population</option><option value="2">two teams</option></select></label>
-    <label id="teamBWrap" hidden title="Team B's body plan: the same as team A's (above), or another one, so different animals evolve against or with each other (snake v insect). Radial uses the Arms count above; Round parts and Min arm apply to both teams">Team B <select id="planB"><option value="">same plan</option><option value="free">Free</option><option value="bilateral">Bilateral</option><option value="radial">Radial</option><option value="snake">Snake</option><option value="quadruped">Quadruped</option><option value="insect">Insect</option><option value="arachnid">Arachnid</option><option value="crustacean">Crustacean</option><option value="centipede">Centipede</option><option value="biped">Biped</option><option value="centaur">Centaur</option><option value="ducktopus">Ducktopus</option></select></label>
+    <label id="teamBWrap" hidden title="Team B's body plan: the same as team A's (above), or another one, so different animals evolve against or with each other (snake v insect). Radial uses the Arms count above; Round parts and Min arm apply to both teams">Team B <select id="planB"><option value="">same plan</option><option value="arachnid">Arachnid</option><option value="bilateral">Bilateral</option><option value="biped">Biped</option><option value="centaur">Centaur</option><option value="centipede">Centipede</option><option value="crustacean">Crustacean</option><option value="ducktopus">Ducktopus</option><option value="free">Free</option><option value="insect">Insect</option><option value="quadruped">Quadruped</option><option value="radial">Radial</option><option value="snake">Snake</option></select></label>
   </div>
   <div class="row" style="margin-top:8px">
     <label title="How much selection rewards bodies unlike the rest of the population (all islands) and past novel bodies. Each island's two fittest always survive. 0 = fitness only">Novelty <select id="novelty"><option value="0">0</option><option value="0.15">0.15</option><option value="0.3" selected>0.3</option><option value="0.5">0.5</option><option value="0.7">0.7</option></select></label>
@@ -196,6 +193,7 @@
     <label data-kind="skijump" title="Ski jumping: the end of the takeoff table swoops up into a kicker this many degrees above level (a 6 m curve), launching the creature upward for more hang time; 0 = none, the table runs straight to the edge">Kicker <input type="number" id="scJumpKick" min="0" max="45" step="1">°</label>
     <label data-kind="skijump" title="Ski jumping: extra points for riding on after the landing without crashing: the full bonus for 3 s upright on the skis alone after the landing is held, a share of it for less (a fall ends the ride out). 0 = the jump ends once the landing is held">Ride-out bonus <input type="number" id="scJumpRide" min="0" max="3" step="0.1"></label>
     <label data-kind="skijump" title="Ski jumping: extra points for landing on the skis alone (nothing else touching the snow) and staying upright on them for a second. Distance scores a point per 10 m from the edge, at the first touch of the landing hill; getting down the inrun without falling is worth up to 0.1">Landing bonus <input type="number" id="scJumpLand" min="0" max="3" step="0.1"></label>
+    <label data-kind="skate" title="Skateboarding: how the board fits the creature. Stance: like a real board under a rider, the deck about a tenth of the creature's height off the ground, its side edges under the middle of the outer feet, so a foot steps off easily to push; a creature whose feet stand side by side (a biped) is turned to stand across the board, as skaters do, and on the flat riding either way along the board counts. Cover the feet (runs before): a deck 11 cm up covering every foot with a margin, which under a sprawling insect was over a metre wide">Board fit <select id="scBoardFit"><option value="stance">Stance</option><option value="feet">Cover the feet</option></select></label>
     <label data-kind="skate" title="Skateboarding: the board's mass, a multiple of the creature's (a real skateboard is about 5% of a rider's weight; a light board shoots out from under a careless foot)">Board mass <input type="number" id="scBoardMass" min="0.02" max="2" step="0.01">×</label>
     <label data-kind="skate" title="Skateboarding: steering. The trucks turn the wheels toward whichever side carries more weight (the front axle one way, the rear the other, so the board carves toward its lean): this many degrees with all the weight on one side's wheels. 0 = the board only rolls straight">Steering <input type="number" id="scBoardLean" min="0" max="40" step="1">°</label>
     <label data-kind="skate" title="Skateboarding: the wheels' rolling resistance, a share of the load on them (real skateboard wheels on smooth concrete: about 0.01, so a board coasting at 2 m/s rolls about 20 m)">Rolling resistance <input type="number" id="scBoardRoll" min="0" max="0.5" step="0.005"></label>
