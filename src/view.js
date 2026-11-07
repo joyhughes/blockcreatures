@@ -458,7 +458,7 @@ export class View {
         // (skateboarding: a deck and four wheels, cylinders across the board)
         const geo = b.wheel ? new THREE.CylinderGeometry(b.box[0], b.box[0], 2 * b.box[2], 20).rotateX(Math.PI / 2) : new THREE.BoxGeometry(2 * b.box[0], 2 * b.box[1], 2 * b.box[2]);
         this.owned.push(geo);
-        const m = new THREE.Mesh(geo, b.wheel ? this.wheelMat : b.deck ? this.deckMat : b.plate ? this.cubeMat : this.barMat);
+        const m = new THREE.Mesh(geo, b.wheel ? this.wheelMat : b.deck ? this.deckMat : b.plate ? this.cubeMat : this.barMat);   // (trucks: steel, as a bar)
         m.position.fromArray(b.at);
         m.castShadow = true;
         cell.cube.add(m);

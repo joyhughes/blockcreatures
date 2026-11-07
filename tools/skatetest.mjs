@@ -27,7 +27,7 @@ for (const [name, g] of gs) {
   }
   const tr = sim.track[0], f = sim.fitness()[0], b = sim.cube ? sim.cube.translation() : { x: 0, z: 0 };
   if (sim.failed[0]) fails++;
-  const end = sim.failed[0] ? 'AUDIT/EXPLODE' : tr.off ? `off@${(tr.fell - sim.tStart).toFixed(1)}` : tr.fell !== undefined ? `fell@${(tr.fell - sim.tStart).toFixed(1)}` : 'rode';
+  const end = sim.failed[0] ? (c.exploded() ? 'EXPLODED' : 'AUDIT') : !tr.start && tr.fell === undefined ? 'never-on' : tr.off ? `off@${(tr.fell - sim.tStart).toFixed(1)}` : tr.fell !== undefined ? `fell@${(tr.fell - sim.tStart).toFixed(1)}` : 'rode';
   console.log(name.padEnd(24), 'fit', f.toFixed(3), end.padEnd(14), 'rolled', (tr.rolled || 0).toFixed(1) + 's', 'board x', b.x.toFixed(2), 'z', b.z.toFixed(2), 'rise', (rise / sim.mass).toFixed(3), 'J/kg', 'mass', c.totalMass.toFixed(2));
 }
 console.log('audit failures', fails, '/', gs.length);

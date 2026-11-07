@@ -220,8 +220,14 @@ const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright',
 //              the deck about a tenth of its height up, its side edges under the outer feet's
 //              middles (easy to step off and push), and a creature whose feet stand side by side
 //              (a biped) turned a quarter turn to stand across it, as skaters do; on the flat,
-//              riding either way along the board counts. 'feet' (runs before) = a deck 11 cm up
-//              covering every foot with a margin, a metre or more wide under a sprawling insect
+//              riding either way along the board counts. 'standard' (default): every creature
+//              gets the same real-world board (STD_BOARD: 0.8 x 0.2 m, 10 cm up), under its feet,
+//              or under the body of a sprawling animal (SPRAWL: insects, arachnids, crustaceans,
+//              centipedes, the ducktopus), whose legs reach past it to the ground; parts over the
+//              deck rest on it, the rest stand on the ground, and the ride starts when it first
+//              touches the board. 'feet' (the first runs) = a deck 11 cm up covering every foot
+//   fallKeep   skateboarding: the share of its distance a ride keeps when it ends in a fall or
+//              stepping off (the measured time and the grace time after it); 1 = all of it
 //   skiDrag    skiing: air drag, N per (m/s)^2 per m^2 of frontal area: tucking low pays
 //   forward    net speed, animal templates on land: only distance in the direction it faced when
 //              measuring began counts (head first; a quadruped evolved to walk rump-first)
@@ -268,7 +274,7 @@ export const SCENE = {
   duration: null, gravity: 9.81, friction: 3.0, drag: 3, lightDist: 6, buoyancy: 1.5, start: 'side',
   strength: 1, toneMin: 0, levelMin: 0, braceMin: 0, toneRate: 8, reflexRate: 6, jointDamp: 3, jointRange: 1.6,
   joints: 'limited', falls: true, standWeight: 0.1, stepWeight: 0.1, knockMass: 2, speed: 'net', forward: true, hill: 8, skiDrag: 0.3, gait: 'none', spinShape: 0.1, slalom: 0, gateGap: 3.5, gateOffset: 0.8, gateWidth: 1.6, gateBonus: 0.2, gateHit: 0.1, jumpInrun: 35, jumpLength: 10, jumpTakeoff: 11, jumpLanding: 35, jumpLand: 0.5, jumpHeight: 0.6, jumpKick: 0, jumpRide: 0.5, grab: false, grabOnly: false, skates: false, bladesOnly: true, wax: 0, course: false, courseHills: 1, courseTurns: 1, courseWidth: 3, implMass: 0.05, throwShape: 0.1,
-  boardMass: 0.25, boardLean: 15, boardRoll: 0.01, boardFit: 'stance',
+  boardMass: 0.25, boardLean: 15, boardRoll: 0.01, boardFit: 'standard', fallKeep: 0.5,
   ball: 'sphere', ballSize: 0.25, ballMass: 0.15, gap: 1, zone: 'plane', slope: 45, maxVolume: 1, sameSize: true, grip: true,
   settle: 'stable', goalDist: 3, goalSize: 0.6, metric: 'surface', apart: true, together: 0.2,
   stepHeight: 0.15, stepDepth: 0.4, steps: 12, ring: 2, engage: 0.5, bothSides: true,
@@ -280,7 +286,7 @@ export const defaultScene = taskName => ({ ...SCENE, ...(TASKS[taskName].scene |
 export function sceneFor(taskName, scene) {
   // scenes saved before a setting existed get its old behaviour; cooperation
   // came after scenes, so it has no legacy scene
-  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0, joints: 'old', falls: false, friction: 1, speed: 'sims', forward: false, gateBonus: 0, gateHit: 0, grab: false, grabOnly: false, jumpRide: 0, bladesOnly: false, boardFit: 'feet' };
+  const old = scene && { zone: scene.gapBody ? 'length' : 'none', grip: false, settle: 'timed', metric: 'surface', apart: false, together: 0, sameSize: false, bothSides: false, engage: 0, joints: 'old', falls: false, friction: 1, speed: 'sims', forward: false, gateBonus: 0, gateHit: 0, grab: false, grabOnly: false, jumpRide: 0, bladesOnly: false, boardFit: 'feet', fallKeep: 1 };
   const legacy = NEW_KINDS.includes(TASKS[taskName].kind) ? {} : LEGACY_SCENE;
   const s = { ...defaultScene(taskName), ...(scene ? old : legacy), ...(scene || {}) };
   if (!(s.duration > 0)) s.duration = TASKS[taskName].duration;
@@ -483,6 +489,14 @@ function boardFeet(genome, parts, feet) {
   if (roles && !f.length) f = parts.map((p, k) => { const r = roles[role(k)]; return r?.ground && !r.prop && role(k) !== 'tail' && role(k) !== 'fluke' ? k : -1; }).filter(k => k >= 0);
   return f.length ? f : [...feet];
 }
+// skateboarding (boardFit 'standard'): a real board, whatever the rider:
+// deck half extents (0.8 x 0.2 m, 1.6 cm thick), its top's height, wheel
+// radius (54 mm wheels), the axles' distance from the middle (a 36 cm
+// wheelbase) and the wheels' from the midline
+const STD_BOARD = { half: [0.4, 0.008, 0.1], top: 0.1, r: 0.027, ax: 0.18, az: 0.08 };
+// sprawling animals ride a standard board on their bodies, these parts, the
+// legs reaching past it to the ground either side
+const SPRAWL = { insect: ['thorax', 'abdomen'], arachnid: ['body', 'abdomen'], crustacean: ['carapace'], centipede: ['segment'], ducktopus: ['mantle'] };
 // skateboarding (boardFit 'stance'): a creature whose feet stand further
 // apart side to side than fore and aft (a biped) is turned a quarter turn,
 // so it stands across the board (which points along X), as skaters do
@@ -1572,7 +1586,7 @@ export class Sim {
     } else {
       // ski jumping: the hill first, the creature on its inrun, tilted to the slope
       const jump = task.kind === 'skijump' ? this.buildJump() : null;
-      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, yaw: task.kind === 'skate' && sc.boardFit === 'stance' ? stanceYaw(g) : 0, ground: land, float: this.surface ? sc.buoyancy : 0, skis: jump ? { ...(sc.bladesOnly ? SKI_TALL : SKI), round: true } : task.kind === 'ski' ? (sc.skates ? (sc.bladesOnly ? SPEED_BLADE : SPEED_SKATE) : sc.bladesOnly ? SKI_TALL : SKI) : task.kind === 'spin' ? SKATE : null,
+      this.creatures = genomes.map(g => new Creature(world, g, { ...copts, yaw: task.kind === 'skate' && (sc.boardFit === 'stance' || (sc.boardFit === 'standard' && !SPRAWL[g.plan?.type])) ? stanceYaw(g) : 0, ground: land, float: this.surface ? sc.buoyancy : 0, skis: jump ? { ...(sc.bladesOnly ? SKI_TALL : SKI), round: true } : task.kind === 'ski' ? (sc.skates ? (sc.bladesOnly ? SPEED_BLADE : SPEED_SKATE) : sc.bladesOnly ? SKI_TALL : SKI) : task.kind === 'spin' ? SKATE : null,
         plane: jump?.plane, tilt: jump ? jump.tilt : task.kind === 'getup' ? START_POSE[sc.start] || START_POSE.side : null,
         gait: land && (task.kind === 'speed' || task.kind === 'upright') ? sc.gait : null,
       }));
@@ -1785,7 +1799,10 @@ export class Sim {
   buildBoard() {
     const sc = this.scene, c = this.creatures[0], B = BOARD;
     if (!c?.valid) return;
-    const feet = boardFeet(c.genome, c.parts, c.feet), stance = sc.boardFit === 'stance';
+    const feet = boardFeet(c.genome, c.parts, c.feet), type = c.genome.plan?.type;
+    const std = sc.boardFit === 'standard', stance = sc.boardFit === 'stance';
+    const bellyParts = std && SPRAWL[type] ? c.parts.map((p, k) => (SPRAWL[type].includes(c.genome.nodes[p.node].role) ? k : -1)).filter(k => k >= 0) : [];
+    const belly = bellyParts.length > 0;
     // feet's outer extents (x0..x1, z0..z1), their middles' (cx, cz), and
     // their mean half extents (fx, fz)
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, fx = 0, fz = 0;
@@ -1800,8 +1817,25 @@ export class Sim {
       fx += ex / feet.length; fz += ez / feet.length;
     }
     if (!(x1 > x0)) { const com = c.com(); x0 = x1 = cx[0] = cx[1] = com[0]; z0 = z1 = cz[0] = cz[1] = com[2]; }
-    let hx, hz, dh, r, clear, inset;
-    if (stance) {
+    let hx, hz, dh, r, clear, inset, lift = null, at0 = null;
+    if (std) {
+      // the standard board, under the body (sprawlers) or the feet's middle;
+      // lifted so the lowest part over the deck rests on it (and nothing
+      // goes below the ground), the rest standing where they are
+      const S = STD_BOARD;
+      [hx, , hz] = S.half; dh = S.half[1]; r = S.r; clear = S.top - 2 * r - 2 * dh; inset = hx - S.ax;
+      let mx = (cx[0] + cx[1]) / 2, mz = (cz[0] + cz[1]) / 2;
+      if (belly) {
+        let bx0 = Infinity, bx1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+        for (const k of bellyParts) { const pc = c.partPose(k).c; bx0 = Math.min(bx0, pc[0]); bx1 = Math.max(bx1, pc[0]); bz0 = Math.min(bz0, pc[2]); bz1 = Math.max(bz1, pc[2]); }
+        mx = (bx0 + bx1) / 2; mz = (bz0 + bz1) / 2;
+      }
+      let over = Infinity;
+      c.parts.forEach((p, k) => { const pc = c.partPose(k).c; if (Math.abs(pc[0] - mx) <= hx && Math.abs(pc[2] - mz) <= hz) over = Math.min(over, c.lowestOf(k)); });
+      if (over === Infinity) over = c.lowest();
+      lift = Math.max(0, S.top - over) + 0.002;
+      at0 = [mx, S.top - dh, mz];
+    } else if (stance) {    } else if (stance) {
       // fitted to the stance, sized to the creature (standY, its centre of
       // mass's height as built): a person's board (0.8 x 0.2 m, 10 cm up)
       // is 0.8 x 0.2 x 0.1 of that, roughly. Along the board the feet are on
@@ -1818,13 +1852,13 @@ export class Sim {
       r = B.wheel; clear = B.clear; dh = B.deck; inset = B.inset;
     }
     const top = 2 * r + clear + 2 * dh, y = top - dh;
-    c.shift([0, top + 0.002, 0]);
+    c.shift([0, lift ?? top + 0.002, 0]);
     const M = (sc.boardMass ?? 0.25) * c.totalMass;
-    const at0 = stance ? [(cx[0] + cx[1]) / 2, y, (cz[0] + cz[1]) / 2] : [(x0 + x1) / 2, y, (z0 + z1) / 2];
+    at0 ??= stance ? [(cx[0] + cx[1]) / 2, y, (cz[0] + cz[1]) / 2] : [(x0 + x1) / 2, y, (z0 + z1) / 2];
     const body = this.world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(...at0).setCanSleep(false));
     const deck = this.world.createCollider(RAPIER.ColliderDesc.cuboid(hx, dh, hz).setDensity(0.8 * M / (8 * hx * dh * hz))
       .setFriction(sc.friction).setRestitution(0), body);
-    const ax = Math.max(0.6 * hx, hx - inset), az = Math.max(stance ? 0.6 * hz : 0.03, hz - 0.6 * r), wy = r - y;
+    const ax = std ? STD_BOARD.ax : Math.max(0.6 * hx, hx - inset), az = std ? STD_BOARD.az : Math.max(stance ? 0.6 * hz : 0.03, hz - 0.6 * r), wy = r - y;
     this.barbell = [{ box: [hx, dh, hz], at: [0, 0, 0], deck: true }];
     const wheels = [];
     for (const sx of [1, -1]) for (const sz of [1, -1]) {
@@ -1833,8 +1867,15 @@ export class Sim {
         .setFriction(0).setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min).setRestitution(0), body));
       this.barbell.push({ box: [r, r, 0.6 * r], at, wheel: true });
     }
+    // (drawn only) the trucks: an axle across under each end, and on a tall
+    // board a hanger up to the deck
+    for (const sx of [1, -1]) {
+      this.barbell.push({ box: [0.3 * r, 0.3 * r, az], at: [sx * ax, wy, 0], truck: true });
+      const hgt = (y - dh) - wy;
+      if (hgt > 0.01) this.barbell.push({ box: [0.5 * r, hgt / 2, Math.min(0.5 * az, 1.5 * r)], at: [sx * ax, wy + hgt / 2, 0], truck: true });
+    }
     this.cube = body; this.ballSphere = false; this.ballR = hx;
-    this.board = { body, deck, wheels, ax, wy, hx, hz, r, top, handles: new Set([deck.handle, ...wheels.map(w => w.handle)]) };
+    this.board = { body, deck, wheels, ax, wy, hx, hz, r, top, belly: new Set(bellyParts), handles: new Set([deck.handle, ...wheels.map(w => w.handle)]) };
     c.groundExtra = this.board.handles;
   }
 
@@ -1885,6 +1926,20 @@ export class Sim {
       const roll = active ? (sc.boardRoll ?? 0.01) * load[i] : cap;
       push(p, u, -Math.sign(va) * Math.min(roll, stop));
     });
+  }
+
+  // skateboarding: off the board for BOARD.off s, or the centre of mass
+  // BOARD.reach beyond the deck, ends the ride (counted to where it was
+  // last on); otherwise the parts touching the board
+  offBoard(c, tr, p) {
+    const parts = this.onBoard(c), bt = this.cube.translation();
+    tr.offFor = parts.size ? 0 : (tr.offFor || 0) + DT;
+    const rel = qrot(qconj(this.cube.rotation()), [p[0] - bt.x, 0, p[2] - bt.z]);
+    if (tr.offFor > BOARD.off || Math.abs(rel[0]) > this.board.hx + BOARD.reach || Math.abs(rel[2]) > this.board.hz + BOARD.reach) {
+      tr.fell = this.t; tr.off = true; tr.last = tr.lastOn;
+      return null;
+    }
+    return parts;
   }
 
   // the creature's parts touching the board
@@ -2430,6 +2485,13 @@ export class Sim {
           // insect's abdomen) may stay there, as on the ground in walking,
           // but touching the ground itself they've fallen
           if (this.board) { const on = this.onBoard(c); tr.resting = new Set([...tr.resting].filter(k => on.has(k))); }
+          // a sprawler on the board: its legs reach the ground either side,
+          // every segment of them (and pincers, tails) may touch it; its body
+          // parts and its head, neck or bill touching down are a fall
+          if (this.board?.belly.size) {
+            const bd = this.board, role = k => c.genome.nodes[c.parts[k].node].role;
+            tr.feet = k => !bd.belly.has(k) && !['head', 'neck', 'bill'].includes(role(k));
+          }
           if (c.skis) {
             const on = new Set(c.skis.map(s => s.body));
             tr.feet = this.scene.bladesOnly ? k => on.has(c.partBody[k]) && !c.bare[k] : k => on.has(c.partBody[k]);
@@ -2438,7 +2500,8 @@ export class Sim {
         }
         const up = qrot(c.partPose(0).q, qrot(qconj(c.partQ[0]), [0, 1, 0]))[1];
         // (on a course, the height above the snow under it; it starts on the flat at 0)
-        const cm = c.com(), low = tr.y0 !== undefined && cm[1] - (this.course ? this.courseAt(cm[0], cm[2]).y : 0) < FALL_LOW * tr.y0;
+        // (a sprawler lowering itself onto the board isn't collapsing)
+        const cm = c.com(), low = !this.board?.belly.size && tr.y0 !== undefined && cm[1] - (this.course ? this.courseAt(cm[0], cm[2]).y : 0) < FALL_LOW * tr.y0;
         // sliding: the slowest foot on the ground is the creature's anchor,
         // and however far the anchor itself slides is subtracted. A planted
         // foot (walking, shuffling) slides nowhere; when every foot skids, as
@@ -2456,8 +2519,9 @@ export class Sim {
           }
           if (anchor) tr.slideOff = add(tr.slideOff || [0, 0, 0], [anchor[0] * DT, 0, anchor[2] * DT]);
         }
-        const deck = this.board && tr.resting.size ? this.onBoard(c) : null;
-        if (up < Math.cos(TEMPLATES[c.genome.plan?.type]?.fallTilt ?? FALL_TILT) || low || (c.parts.some((p, k) => c.onGround[k] && !tr.feet(k) && !(tr.resting.has(k) && (!deck || deck.has(k)))))) {
+        // (a sprawler's body may get down onto the deck at any time)
+        const sprawl = !!this.board?.belly.size, deck = this.board && (tr.resting.size || sprawl) ? this.onBoard(c) : null;
+        if (up < Math.cos(TEMPLATES[c.genome.plan?.type]?.fallTilt ?? FALL_TILT) || low || (c.parts.some((p, k) => c.onGround[k] && !tr.feet(k) && !(tr.resting.has(k) && (!deck || deck.has(k))) && !(sprawl && deck.has(k))))) {
           tr.fell = this.t;
           // roll back FALL_BACK s, or only to the last step if that came later
           const back = tr.past?.[0], caught = tr.caught;
@@ -2679,6 +2743,9 @@ export class Sim {
     if (task.kind === 'spin') { this.spinStep(c, tr, y); return; }
     if (task.kind === 'skijump') { this.jumpStep(c, tr); return; }
     // walking with falls: nothing after the fall counts, nor in the grace time
+    // skateboarding: stepping off in the grace time after the measured time
+    // ends the ride too (fallKeep), as a fall then does
+    if (this.board && tr.start && tr.fell === undefined && this.t > this.tStart + this.T + 1e-9 && this.scene.fallKeep !== undefined && this.scene.fallKeep < 1) this.offBoard(c, tr, [c.com()[0], 0, c.com()[2]]);
     if (this.walkFalls && (tr.fell !== undefined || this.t > this.tStart + this.T + 1e-9)) return;
     if (task.env === 'land') {
       if (tr.y0 === undefined) tr.y0 = tr.minY = y;
@@ -2713,14 +2780,15 @@ export class Sim {
       // of mass over BOARD.reach beyond the deck's end, the ride is over and
       // counts only to where it was last on the board.
       const p = [c.com()[0], 0, c.com()[2]];
-      if (!tr.start) { tr.start = p; tr.fwd = this.boardHeading(); tr.lastOn = p; tr.rolled = 0; }
-      const parts = this.onBoard(c), on = parts.size > 0, bt = this.cube.translation();
-      tr.offFor = on ? 0 : (tr.offFor || 0) + DT;
-      const rel = qrot(qconj(this.cube.rotation()), [p[0] - bt.x, 0, p[2] - bt.z]);
-      if (tr.offFor > BOARD.off || Math.abs(rel[0]) > this.board.hx + BOARD.reach || Math.abs(rel[2]) > this.board.hz + BOARD.reach) {
-        tr.fell = this.t; tr.off = true; tr.last = tr.lastOn;
-        return;
+      // the ride starts when it first touches the board (a sprawler standing
+      // over it has to get down onto it); until then nothing counts
+      if (!tr.start) {
+        if (!this.onBoard(c).size) return;
+        tr.start = p; tr.fwd = this.boardHeading(); tr.lastOn = p; tr.rolled = 0;
       }
+      const parts = this.offBoard(c, tr, p);
+      if (!parts) return;
+      const on = parts.size > 0;
       this.gateStep(c, tr, p);
       // (riding with no foot on the ground: rolling, for the status line)
       if (on && !c.parts.some((q, k) => c.onGround[k] && !parts.has(k))) tr.rolled += DT;
@@ -2955,7 +3023,8 @@ export class Sim {
         const stand = (this.scene.standWeight ?? 0.1) * (0.5 * up + 0.5 * Math.max(0, Math.min(1, tr.h0 || 0)));
         if (!tr.start || !tr.last) return stand;
         let dist = dot(sub(tr.last, tr.start), tr.fwd);
-        if (this.scene.boardFit === 'stance' && !this.hill) dist = Math.abs(dist);   // (on the flat the board has no front)
+        if ((this.scene.boardFit === 'stance' || this.scene.boardFit === 'standard') && !this.hill) dist = Math.abs(dist);   // (on the flat the board has no front)
+        if (tr.fell !== undefined) dist *= this.scene.fallKeep ?? 1;   // a ride ending in a fall or stepping off keeps fallKeep of it
         if (tr.cap !== undefined) dist = Math.min(dist, tr.cap - tr.start[0]);   // slalom: up to the missed gate
         return Math.max(0, Math.max(0, dist) / T + this.gatePoints(tr)) + stand;
       }

@@ -33,7 +33,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Javelin grip (beyond Sims) | as javelin, no throw | pre-training for the javelin: 0.1 for reaching a hand to it, 0.1 for touching it, 0.3 for lifting it in the hands alone (two or more hand parts on it, nothing else) up to 0.2 m, 0.5 for holding it there 2 s. A fall, or knocking it onto the ground, scores 0. In Javelin (Scene: *Grab*) a throw counts only once it has been held up 0.5 s, and falls or knocking it away score 0 |
 | Speed skating (beyond Sims) | flat ice (friction 0.02) on long blades 6 cm tall that grip across their line, light air drag | metres straight ahead (the way it faced as measuring began) per second until any fall. Only the blades may touch the ice: a boot on it is a fall. A skater may lift a skate and push out sideways off the other |
 | Ski jumping (beyond Sims) | a hill of solid snow boxes: a 35° inrun curving up into an 11° takeoff table, maybe a kicker swooping up at its end (Scene: *Kicker*), the edge standing *Edge height* above the knoll, a 35° landing hill, the flat outrun; rounded skis, light air drag | 0.1 for getting down the inrun (shaping), a point per 10 m from the edge to the first touch of the landing hill, +0.5 for landing on the skis alone and holding it 1 s, +0.5 × the share of 3 s more it rides out upright on its skis alone (a fall ends the ride) |
-| Skateboarding (beyond Sims) | standing on a skateboard on flat ground: a deck spanning its feet on four wheels that roll freely, grip sideways and steer toward whichever side carries more weight, as trucks do | metres ridden per second the way the board pointed at the start, until a fall or stepping off (nothing touching the board for 0.5 s, or the centre of mass 0.3 m past the deck), plus the standing bonus. Only feet may touch the deck or the ground; pushing off the ground with a foot is how it gets going |
+| Skateboarding (beyond Sims) | on a real-world skateboard (0.8 × 0.2 m, 10 cm up) on flat ground, standing on it, or for sprawling animals lying on it with their legs over the side; wheels that roll freely, grip sideways and steer toward whichever side carries more weight, as trucks do | metres ridden per second the way the board pointed at the start, from first touching the board until a fall or stepping off (nothing touching the board for 0.5 s, or the centre of mass 0.3 m past the deck), halved if the ride ends that way, plus the standing bonus. Only feet may touch the deck or the ground; pushing off the ground with a foot is how it gets going |
 | Downhill skateboarding (beyond Sims) | as skateboarding, down a 5° hill, light air drag | as skateboarding (metres downhill per second) |
 | Skateboard slalom (beyond Sims) | as downhill, 4°, through four gates 5 m apart, alternately 1.5 m to either side, so rolling straight passes beside every opening | as skateboarding, but distance past the first gate missed doesn't count; slalom's gate bonus and hit penalty. Steering is by leaning |
 
@@ -528,20 +528,25 @@ the best of the first runs is a biped that rides its skis the whole way
 (8.1 m in 10 s).
 
 **Skateboarding** (targets): the board is a separate body, a deck on four
-wheels, fitted to the creature's stance as a real board fits a rider (Scene:
-*Board fit*): the deck about a tenth of its centre of mass's height off the
-ground (4 cm under an insect, 10 cm under a biped), long enough for the
-feet fore and aft, with its side edges under the middles of the outer feet,
-so a foot steps off it to push with a small move. A creature whose feet
-stand side by side (a biped) is turned a quarter turn to stand across the
-board, as skaters do, and on the flat riding either way along it counts.
-The feet are an animal's real feet wherever they hang (a centaur's
-forehooves are 35 cm up until it settles). The first version covered every
-foot with a margin, 11 cm up whatever the creature's size: under sprawling
-insects the deck was over a metre wide and a third of their height up, and
-they couldn't get a leg over the side; runs from then keep that board
-(*Cover the feet*). Sprawlers still need a deck as wide as their stance.
-The board weighs *Board mass* × the creature (0.25). The creature is
+wheels: the same real-world board for every creature (Scene: *Board fit*,
+Standard), a 0.8 × 0.2 m deck 10 cm off the ground on 54 mm wheels, a 36 cm
+wheelbase. It goes under the creature's feet, or under the body of a
+sprawling animal (insects, arachnids, crustaceans, centipedes, the
+ducktopus), whose legs reach past it to the ground on either side to push,
+like a child lying on a skateboard. Parts over the deck rest on it and the
+rest stand on the ground; a sprawler holding its belly higher than the deck
+has to get down onto it, and the ride (and the distance) starts when it
+first touches the board. For sprawlers every leg segment, pincer and tail
+may touch the ground; the body, head, neck or bill touching it is a fall,
+and lowering itself onto the deck isn't collapsing. A creature whose feet
+stand side by side (a biped) is turned to stand across the board, as
+skaters do, and on the flat riding either way along it counts. Earlier
+versions fitted the board to each creature: first covering every foot with
+a margin, 11 cm up (over a metre wide under an insect, which couldn't get a
+leg over the side), then fitted to its stance; their runs keep those boards.
+A ride that ends in a fall or stepping off, even in the 2 s after the
+measured time, keeps only *Fall keeps* (half) of its distance: before, it
+kept nearly all of it, and winners fell off at the end. The board weighs *Board mass* × the creature (0.25). The creature is
 lifted onto it and settles there with the wheels braked. The wheels are
 balls with no friction of their own; each step, each axle on the ground has
 its sideways velocity at the ground taken out, up to the load its wheels
