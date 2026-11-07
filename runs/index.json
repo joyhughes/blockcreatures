@@ -1,5 +1,65 @@
 [
  {
+  "file": "skate-502-quadruped-isl6-nov0.3-st0.25-trained.json",
+  "mtime": 1794072259.7657154,
+  "size": 7968985
+ },
+ {
+  "file": "skate-501-isl6-nov0.3-st0.25.json",
+  "mtime": 1794072125.465613,
+  "size": 1736666
+ },
+ {
+  "file": "xcCourse-501-biped-isl3-nov0.3-st0.25-trained.json",
+  "mtime": 1792337290.665979,
+  "size": 1981342
+ },
+ {
+  "file": "centaur-401-centaur-isl3-nov0.3-st0.25.json",
+  "mtime": 1792306563.28653,
+  "size": 7187936
+ },
+ {
+  "file": "speedSkate-306-biped-isl3-nov0.3-st0.25-trained.json",
+  "mtime": 1792301809.3737879,
+  "size": 4003433
+ },
+ {
+  "file": "skiJump-305-quadruped-isl3-nov0.3-st0.25-trained.json",
+  "mtime": 1792300762.169566,
+  "size": 5308529
+ },
+ {
+  "file": "skiJump-304-quadruped-isl3-nov0.3-st0.25-trained.json",
+  "mtime": 1792299890.955637,
+  "size": 5370829
+ },
+ {
+  "file": "speedSkate-303-biped-isl3-nov0.3-st0.25-trained.json",
+  "mtime": 1792287492.7285056,
+  "size": 3992837
+ },
+ {
+  "file": "javelinGrab-302-biped-isl3-nov0.3-st0.25-trained.json",
+  "mtime": 1792287480.6947207,
+  "size": 4002432
+ },
+ {
+  "file": "speedSkate-303-quadruped-isl3-nov0.3-st0.25-trained.json",
+  "mtime": 1792287284.4850762,
+  "size": 5250387
+ },
+ {
+  "file": "skiJump-301-biped-isl3-nov0.3-st0.25-trained.json",
+  "mtime": 1792287116.64095,
+  "size": 3965956
+ },
+ {
+  "file": "skiJump-301-quadruped-isl3-nov0.3-st0.25-trained.json",
+  "mtime": 1792287016.3663723,
+  "size": 5353932
+ },
+ {
   "file": "biped-102-biped-isl3-nov0.3-st0.25-seeded.json",
   "mtime": 1791950172.59783,
   "size": 4842167

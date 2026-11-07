@@ -6,7 +6,7 @@ import { makeRng } from './math.js';
 import { Recorder } from './record.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1', ski: 'm/s downhill', spin: 'turns', throw: 'm thrown', skijump: 'points' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1', ski: 'm/s downhill', spin: 'turns', throw: 'm thrown', skijump: 'points', skate: 'm/s ridden' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -53,7 +53,7 @@ function setTask(key) {
 // the new scene straight away.
 const SC_FIELDS = { duration: 'scDuration', gravity: 'scGravity', friction: 'scFriction', drag: 'scDrag', buoyancy: 'scBuoyancy', start: 'scStart',
   strength: 'scStrength', toneMin: 'scToneMin', levelMin: 'scLevelMin', braceMin: 'scBraceMin',
-  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', gait: 'scGait', spinShape: 'scSpinShape', slalom: 'scSlalom', gateGap: 'scGateGap', gateOffset: 'scGateOffset', gateWidth: 'scGateWidth', gateBonus: 'scGateBonus', gateHit: 'scGateHit', jumpInrun: 'scJumpInrun', jumpLength: 'scJumpLength', jumpTakeoff: 'scJumpTakeoff', jumpLanding: 'scJumpLanding', jumpLand: 'scJumpLand', jumpHeight: 'scJumpHeight', jumpKick: 'scJumpKick', jumpRide: 'scJumpRide', grab: 'scGrab', grabOnly: 'scGrabOnly', skates: 'scSkates', bladesOnly: 'scBladesOnly', wax: 'scWax', course: 'scCourse', courseHills: 'scCourseHills', courseTurns: 'scCourseTurns', courseWidth: 'scCourseWidth', implMass: 'scImplMass', throwShape: 'scThrowShape', hill: 'scHill', skiDrag: 'scSkiDrag', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
+  jointRange: 'scJointRange', joints: 'scJoints', falls: 'scFalls', standWeight: 'scStandWeight', stepWeight: 'scStepWeight', speed: 'scSpeed', forward: 'scForward', gait: 'scGait', spinShape: 'scSpinShape', slalom: 'scSlalom', gateGap: 'scGateGap', gateOffset: 'scGateOffset', gateWidth: 'scGateWidth', gateBonus: 'scGateBonus', gateHit: 'scGateHit', jumpInrun: 'scJumpInrun', jumpLength: 'scJumpLength', jumpTakeoff: 'scJumpTakeoff', jumpLanding: 'scJumpLanding', jumpLand: 'scJumpLand', jumpHeight: 'scJumpHeight', jumpKick: 'scJumpKick', jumpRide: 'scJumpRide', grab: 'scGrab', grabOnly: 'scGrabOnly', skates: 'scSkates', bladesOnly: 'scBladesOnly', wax: 'scWax', course: 'scCourse', courseHills: 'scCourseHills', courseTurns: 'scCourseTurns', courseWidth: 'scCourseWidth', implMass: 'scImplMass', throwShape: 'scThrowShape', hill: 'scHill', skiDrag: 'scSkiDrag', boardMass: 'scBoardMass', boardLean: 'scBoardLean', boardRoll: 'scBoardRoll', knockMass: 'scKnockMass', jointDamp: 'scJointDamp', toneRate: 'scToneRate', reflexRate: 'scReflexRate', lightDist: 'scLightDist',
   ball: 'scBall', ballSize: 'scBallSize', ballMass: 'scBallMass', gap: 'scGap', zone: 'scZone', slope: 'scSlope', maxVolume: 'scMaxVolume',
   grip: 'scGrip', metric: 'scMetric', sameSize: 'scSameSize', apart: 'scApart', settle: 'scSettle', goalDist: 'scGoalDist', goalSize: 'scGoalSize', together: 'scTogether',
   stepHeight: 'scStepHeight', stepDepth: 'scStepDepth', steps: 'scSteps', ring: 'scRing', engage: 'scEngage', bothSides: 'scBothSides' };
@@ -849,6 +849,10 @@ function hudText(finalFit) {
     s += th.knocked ? ' · knocked it away: no score' : th.armed ? ' · held up: throw armed' : th.up > 0 ? ` · holding it up ${th.up.toFixed(1)}s` : th.handTouch ? ' · touched it' : '';
   }
   if (sim.throw && sim.tStart !== null && !sim.scene.grabOnly) s += ` · best throw ${sim.throw.best.toFixed(2)} m${sim.throw.flight ? ' · in flight' : ''}`;
+  if (sim.board && sim.tStart !== null && sim.t >= sim.tStart && sim.track[0]) {
+    const tr = sim.track[0], d = tr.start && tr.last ? Math.max(0, (tr.last[0] - tr.start[0]) * tr.fwd[0] + (tr.last[2] - tr.start[2]) * tr.fwd[2]) : 0;
+    s += ` · ${d.toFixed(2)} m` + (tr.off ? ' · stepped off the board' : tr.fell !== undefined ? ` · fell at ${(tr.fell - sim.tStart).toFixed(1)}s` : tr.offFor > 0 ? ' · off the board' : ' · riding') + ` · rolling ${(tr.rolled || 0).toFixed(1)}s`;
+  }
   if (sim.task.kind === 'spin' && sim.track[0]?.best !== undefined) s += ` · best landed ${sim.track[0].best.toFixed(2)} turns${sim.track[0].air ? ' · in the air' : ''}`;
   if (sim.statics && sim.tStart !== null && sim.creatures[0].valid) s += ` · lowest part ${Math.max(0, sim.creatures[0].lowest()).toFixed(2)} m up`;
   if (T.kind === 'upright' && sim.track[0]) { const f = sim.track[0].fell; s += f === undefined ? ' · upright' : f < T.settle ? ' · fell while settling' : ` · fell at ${(f - T.settle).toFixed(1)}s`; }

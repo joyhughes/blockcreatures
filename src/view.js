@@ -102,6 +102,9 @@ export class View {
     this.ballMat = new THREE.MeshStandardMaterial({ map: bt, roughness: 0.45 });
     // lifting: the barbell's bar, steel
     this.barMat = new THREE.MeshStandardMaterial({ color: 0x9aa3ad, metalness: 0.6, roughness: 0.35 });
+    // skateboarding: a maple deck with dark grip tape on top, pale urethane wheels
+    this.deckMat = [0x9a6b3f, 0x9a6b3f, 0x262626, 0xc8955a, 0x9a6b3f, 0x9a6b3f].map(color => new THREE.MeshStandardMaterial({ color, roughness: 0.7 }));
+    this.wheelMat = new THREE.MeshStandardMaterial({ color: 0xf0e4c8, roughness: 0.5 });
     // stairs: pale stone
     this.stairMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: 0.85 });
     // slalom gate panels: racing red, so they stand out on the snow
@@ -452,9 +455,10 @@ export class View {
       // lifting: a group of a bar and two plates, moved as one body
       cell.cube = new THREE.Group();
       for (const b of sim.barbell) {
-        const geo = new THREE.BoxGeometry(2 * b.box[0], 2 * b.box[1], 2 * b.box[2]);
+        // (skateboarding: a deck and four wheels, cylinders across the board)
+        const geo = b.wheel ? new THREE.CylinderGeometry(b.box[0], b.box[0], 2 * b.box[2], 20).rotateX(Math.PI / 2) : new THREE.BoxGeometry(2 * b.box[0], 2 * b.box[1], 2 * b.box[2]);
         this.owned.push(geo);
-        const m = new THREE.Mesh(geo, b.plate ? this.cubeMat : this.barMat);
+        const m = new THREE.Mesh(geo, b.wheel ? this.wheelMat : b.deck ? this.deckMat : b.plate ? this.cubeMat : this.barMat);
         m.position.fromArray(b.at);
         m.castShadow = true;
         cell.cube.add(m);
@@ -504,7 +508,7 @@ export class View {
   // centred on them instead
   locked() {
     const k = this.cells[0]?.sim.task.kind;
-    return k === 'ski' || k === 'skijump';
+    return k === 'ski' || k === 'skijump' || k === 'skate';
   }
 
   // set obj to pose (c, q) moved by off, or alpha of the way there from its

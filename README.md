@@ -33,6 +33,9 @@ evolved together, for the same evolutionary targets Sims used:
 | Javelin grip (beyond Sims) | as javelin, no throw | pre-training for the javelin: 0.1 for reaching a hand to it, 0.1 for touching it, 0.3 for lifting it in the hands alone (two or more hand parts on it, nothing else) up to 0.2 m, 0.5 for holding it there 2 s. A fall, or knocking it onto the ground, scores 0. In Javelin (Scene: *Grab*) a throw counts only once it has been held up 0.5 s, and falls or knocking it away score 0 |
 | Speed skating (beyond Sims) | flat ice (friction 0.02) on long blades 6 cm tall that grip across their line, light air drag | metres straight ahead (the way it faced as measuring began) per second until any fall. Only the blades may touch the ice: a boot on it is a fall. A skater may lift a skate and push out sideways off the other |
 | Ski jumping (beyond Sims) | a hill of solid snow boxes: a 35° inrun curving up into an 11° takeoff table, maybe a kicker swooping up at its end (Scene: *Kicker*), the edge standing *Edge height* above the knoll, a 35° landing hill, the flat outrun; rounded skis, light air drag | 0.1 for getting down the inrun (shaping), a point per 10 m from the edge to the first touch of the landing hill, +0.5 for landing on the skis alone and holding it 1 s, +0.5 × the share of 3 s more it rides out upright on its skis alone (a fall ends the ride) |
+| Skateboarding (beyond Sims) | standing on a skateboard on flat ground: a deck spanning its feet on four wheels that roll freely, grip sideways and steer toward whichever side carries more weight, as trucks do | metres ridden per second the way the board pointed at the start, until a fall or stepping off (nothing touching the board for 0.5 s, or the centre of mass 0.3 m past the deck), plus the standing bonus. Only feet may touch the deck or the ground; pushing off the ground with a foot is how it gets going |
+| Downhill skateboarding (beyond Sims) | as skateboarding, down a 5° hill, light air drag | as skateboarding (metres downhill per second) |
+| Skateboard slalom (beyond Sims) | as downhill, 4°, through four gates 5 m apart, alternately 1.5 m to either side, so rolling straight passes beside every opening | as skateboarding, but distance past the first gate missed doesn't count; slalom's gate bonus and hit penalty. Steering is by leaning |
 
 ### Falling over: Sims' rules
 
@@ -523,6 +526,28 @@ touch the snow, with no allowance for parts resting on it at the start; a
 creature that does is fallen, and scores only for standing. Under that rule
 the best of the first runs is a biped that rides its skis the whole way
 (8.1 m in 10 s).
+
+**Skateboarding** (targets): the board is a separate body, a deck on
+four wheels, sized to span the creature's feet as built (an animal's real
+feet, wherever they hang: a centaur's forehooves are 35 cm up until it
+settles), weighing *Board mass* × the creature (0.25). The creature is
+lifted onto it and settles there with the wheels braked. The wheels are
+balls with no friction of their own; each step, each axle on the ground has
+its sideways velocity at the ground taken out, up to the load its wheels
+carried in the last step (Rapier's contact impulses), and loses
+*Rolling resistance* × that load along its line (0.01: a board coasting at
+2 m/s rolls about 20 m). Each impulse is at most what stops that motion at
+that point, by the board's effective mass there, so the wheels only take
+energy out. Steering is by weight, not tilt: the wheels are rigid, so the
+deck barely tilts. With more load on one side's wheels, the front axle turns
+toward that side and the rear one away, up to *Steering* degrees (15) with
+all the weight on one side. The board counts as ground for touch and the
+fall rules, so only feet may touch it; parts resting on the deck as the
+ride starts (an insect's abdomen) may stay there, but touching the ground
+they've fallen. Off the board for 0.5 s, or with the centre of mass 0.3 m
+past the deck, the ride is over and counts to where it was last on it.
+Random creatures ridden down a 5° hill rolled 50 m without moving a muscle,
+so downhill is mostly staying on; the slalom asks for steering.
 
 **Walking is falling forward and catching yourself.** A beginner takes a
 step or two and falls, and rolling the score back 2 s erased exactly those
