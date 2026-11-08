@@ -1,12 +1,14 @@
-import { initPhysics, Sim, TASKS, DT, sceneFor, defaultScene } from './sim.js';
+import { initPhysics, Sim, TASKS, DT, sceneFor, defaultScene, AUDIO as AUDIO_VIEW } from './sim.js';
 import { Evolver, TRAINED_SEED } from './evolve.js';
 import { Pool } from './pool.js';
 import { View } from './view.js';
 import { makeRng } from './math.js';
 import { Recorder } from './record.js';
+import { Troupe } from './dance.js';
+import { Ear } from './audio.js';
 
 const $ = id => document.getElementById(id);
-const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1', ski: 'm/s downhill', spin: 'turns', throw: 'm thrown', skijump: 'points', skate: 'm/s ridden' };
+const UNITS = { speed: 'm/s', jump: 'm high', follow: 'm/s closing', compete: 'score 0–2', cooperate: 'score 0–2', volley: 'passes', wrestle: 'score 0–2.5', climb: 'm climbed', lift: 'm lifted', upright: 'm/s', getup: 'standing 0–1', stand: 'standing 0–1', knock: 'standing 0–1', ski: 'm/s downhill', spin: 'turns', throw: 'm thrown', skijump: 'points', skate: 'm/s ridden', dance: 'judged by you' };
 const COLORS = ['#e8b04a', '#4fa3d9', '#d9534f', '#6cbf6a', '#b07ad9', '#e07a3f', '#4fc1b8', '#d96fa3', '#9aa64a', '#7a8cd9', '#c9a27a', '#5f9e8f'];
 
 await initPhysics();
@@ -40,6 +42,7 @@ $('tasks').onchange = () => { if (running) $('tasks').value = task; else setTask
 function setTask(key) {
   task = key;
   $('tasks').value = key;
+  showDance();
   $('sUnit').textContent = 'best ' + UNITS[TASKS[key].kind];
   view.setEnv(TASKS[key].env);
   showPlan();
@@ -194,7 +197,7 @@ function newRun() {
 function switchRun() {
   const r = runs.get(runKey());
   // a target's first run: the panel's scene, with the target's own ball
-  if (!r) { writeScene({ ...readScene(), ...(TASKS[task].scene || {}) }); newRun(); loadChampion(); return; }
+  if (!r) { writeScene({ ...readScene(), ...(TASKS[task].scene || {}) }); newRun(); if (isDance()) enterDance(); else loadChampion(); return; }
   evolver = r;
   $('pop').value = r.popSize;
   $('islands').value = String(r.islands);
@@ -205,7 +208,8 @@ function switchRun() {
   selected = -1; pendingGen = -1;
   $('gens').innerHTML = '';
   refresh();
-  if (r.history.length) showGen(r.history.length - 1);
+  if (isDance()) enterDance();
+  else if (r.history.length) showGen(r.history.length - 1);
   else loadChampion();
 }
 
@@ -289,12 +293,117 @@ function settleSims(ms) {
   }
   if (busy) return;
   settled = true;
-  view.load(sims, settleLabels);
+  view.load(sims, replay.dance ? replay.cells.map(c => ({ text: c.label, color: c.color })) : settleLabels);
   if (replay.focus >= 0) view.focus_(replay.focus, true);
+  if (replay.dance) for (const k of picked) view.highlight(k, true);
   pauseUntil = performance.now() + 400;
 }
 
 $('restart').onclick = () => { if (replay) { replay.trial = 0; restartSim(); } };
+
+// ---------------------------------------------------------------- dancing
+// No score: a troupe dances to what the microphone hears, the person watching
+// picks the dancers they like, and the next troupe is bred from them
+// (dance.js). Each target-and-plan run has its own troupe, kept (with the
+// last few troupes before it) in this browser.
+const isDance = () => TASKS[task].kind === 'dance';
+const ear = new Ear();
+const troupes = new Map();
+let troupe = null, picked = new Set(), danceSeen = false;
+const DANCE_KEEP = 8;   // troupes kept for Back, here and in storage
+const storeKey = () => 'bc-dance-' + runKey();
+function saveTroupe() {
+  try { localStorage.setItem(storeKey(), JSON.stringify({ size: troupe.size, gens: troupe.gens.slice(-DANCE_KEEP), gen0: Math.max(0, troupe.gens.length - DANCE_KEEP) + (troupe.gen0 || 0) })); } catch {}
+}
+function newTroupe() {
+  const b = body();
+  troupe = new Troupe({ body: b, size: +$('danceSize').value, seed: +$('seed').value + Math.floor(Math.random() * 1e6) });
+  troupe.start(b.trained ? STARTERS[b.plan.type].genome : null);
+  troupe.gen0 = 0;
+  troupes.set(runKey(), troupe);
+  saveTroupe();
+}
+function enterDance() {
+  troupe = troupes.get(runKey());
+  if (!troupe) {
+    try {
+      const d = JSON.parse(localStorage.getItem(storeKey()) || 'null');
+      if (d?.gens?.length) { troupe = new Troupe({ body: body(), size: d.size }); troupe.load(d); troupe.gen0 = d.gen0 || 0; troupes.set(runKey(), troupe); }
+    } catch {}
+  }
+  if (!troupe) newTroupe();
+  showTroupe();
+}
+function showTroupe() {
+  picked = new Set();
+  const n = troupe.gen + (troupe.gen0 || 0);
+  startReplay({ dance: true, scene: evolver.scene, genome: troupe.dancers[0], label: n ? `troupe ${n + 1}` : 'first troupe',
+    cells: troupe.dancers.map((g, k) => ({ genome: g, label: `#${k + 1}`, color: '#ffffff' })) });
+  drawGraph(troupe.dancers[0]);
+  danceUI();
+}
+function pickDancer(k) {
+  if (k < 0 || !replay.cells[k]) return;
+  if (picked.has(k)) picked.delete(k); else picked.add(k);
+  const on = picked.has(k), cell = replay.cells[k];
+  Object.assign(cell, { label: on ? `★ #${k + 1}` : `#${k + 1}`, color: on ? '#e8b04a' : '#ffffff' });
+  view.setLabel(k, cell.label, cell.color);
+  view.highlight(k, on);
+  replay.genome = cell.genome;
+  drawGraph(cell.genome);
+  danceUI();
+}
+view.onZoom = k => { if (!replay?.dance) return; replay.focus = k; if (replay.cells[k]) { replay.genome = replay.cells[k].genome; drawGraph(replay.genome); } };
+function danceUI() {
+  $('breed').disabled = !picked.size;
+  $('breed').textContent = picked.size ? `Breed from ${picked.size} picked` : 'Breed from picked';
+  $('danceBack').disabled = troupe.gens.length < 2;
+  const n = troupe.gen + (troupe.gen0 || 0);
+  $('danceNote').textContent = `Troupe ${n + 1}. Click the dancers you like (they glow and get a star; click again to unpick), then Breed: the next troupe keeps them and fills the floor with their offspring: mutants of one, or with two or more picked, crosses of two. Double-click a dancer to zoom in, Esc to zoom out.`
+    + (troupe.dancers[0]?.plan && body().trained ? ' The first troupe came from the trained walker, so most can stand.' : '');
+}
+function showDance() {
+  const on = isDance();
+  $('danceBox').hidden = !on;
+  $('evoBox').hidden = $('gensBox').hidden = on;
+  $('show').hidden = on;
+  view.zoomPick = !on;
+  if (!on) ear.stop();
+  // dancers on their feet: start from the trained walker where there is one
+  if (on && !danceSeen) { danceSeen = true; $('trained').checked = true; showPlan(); }
+}
+$('breed').onclick = () => {
+  if (!picked.size) return;
+  troupe.breed([...picked].sort((a, b) => a - b), $('danceMut').value);
+  if (troupe.gens.length > DANCE_KEEP) { troupe.gens.shift(); troupe.gen0 = (troupe.gen0 || 0) + 1; }
+  saveTroupe();
+  showTroupe();
+};
+$('danceBack').onclick = () => { if (troupe.back()) { saveTroupe(); showTroupe(); } };
+$('danceNew').onclick = () => { newTroupe(); showTroupe(); };
+$('danceSize').onchange = () => { troupe.size = +$('danceSize').value; };
+$('mic').onclick = async () => {
+  if (ear.mode === 'mic') { ear.stop(); micUI(); return; }
+  try { await ear.listen(); micUI(); }
+  catch (e) { ear.stop(); micUI(); $('micNote').textContent = `No microphone: ${e.message || e.name}. Try Test beat.`; }
+};
+$('testBeat').onclick = () => { if (ear.mode === 'beat') ear.stop(); else ear.testBeat(); micUI(); };
+function micUI() {
+  $('mic').textContent = ear.mode === 'mic' ? '■ Stop listening' : '🎤 Listen';
+  $('testBeat').textContent = ear.mode === 'beat' ? '■ Stop beat' : 'Test beat';
+  $('micNote').textContent = ear.mode === 'mic' ? 'Listening: play some music. The sound stays in this page.'
+    : ear.mode === 'beat' ? 'A made-up 120 bpm beat (nothing is played).' : 'The dancers hear nothing yet.';
+}
+const AUD_COLORS = ['#d9dde4', '#d9534f', '#e8b04a', '#4fa3d9', '#6cbf6a'];
+function drawMeter() {
+  const cv = $('meter'), g = cv.getContext('2d'), w = cv.width / 5;
+  g.clearRect(0, 0, cv.width, cv.height);
+  for (let k = 0; k < 5; k++) {
+    const h = AUDIO_VIEW[k] * (cv.height - 4);
+    g.fillStyle = AUD_COLORS[k];
+    g.fillRect(k * w + 4, cv.height - 2 - h, w - 8, h);
+  }
+}
 
 // ---------------------------------------------------------------- video
 // Record restarts the replay and captures every trial of it, then saves the
@@ -382,6 +491,7 @@ $('labels').onchange = () => view.setLabels($('labels').checked);
 // screen (genotype graph, Evolve from this, Record); clicking empty space or
 // Esc zooms back out.
 function pick(k) {
+  if (replay?.dance) return pickDancer(k);
   if (!replay?.cells) return;
   replay.focus = k;
   const cell = replay.cells[k] || replay.cells[0];
@@ -390,7 +500,7 @@ function pick(k) {
 }
 view.onPick = pick;
 addEventListener('keydown', e => {
-  if (e.key === 'Escape' && replay?.focus >= 0) { view.focus_(-1); pick(-1); }
+  if (e.key === 'Escape' && replay?.focus >= 0) { view.focus_(-1); if (replay.dance) replay.focus = -1; else pick(-1); }
 });
 $('show').onchange = () => {
   const latest = evolver.history.length - 1;
@@ -785,6 +895,7 @@ let acc = 0, last = performance.now(), slowed = false;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
+  if (isDance()) { ear.update(now); drawMeter(); }
   const allDone = () => sims.every(s => s.done);
   if (sim && !settled) {
     settleSims(25);
@@ -836,6 +947,11 @@ function frame(now) {
 
 function hudText(finalFit) {
   const T = TASKS[rtask()];
+  if (replay.dance) {
+    const n = picked.size;
+    return `${ear.mode === 'mic' ? 'listening' : ear.mode === 'beat' ? 'test beat' : 'silence: press Listen'} · `
+      + (n ? `${n} picked: Breed from picked` : 'click the dancers you like (double-click to zoom in)') + (slowed ? ' · slowed down to keep up' : '');
+  }
   let s = `t = ${Math.max(0, sim.t - (sim.tStart ?? sim.t)).toFixed(1)} / ${sim.T}s`;
   if (sim.settling) s = sim.relaxing && sim.tStart === null ? `relaxing ${sim.t.toFixed(1)}s (no friction, no muscles)` : `settling ${sim.t.toFixed(1)}s`;
   if (T.trials > 1) s += ` · trial ${replay.trial + 1}/${T.trials}`;

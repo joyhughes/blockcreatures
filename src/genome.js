@@ -43,6 +43,14 @@ export const FN_NAMES = Object.keys(NEURON_FNS);
 // 23-25 proprioception: each joint axis's turning rate (rad/s), 26-28 its
 // muscle's effort, the brain's torque as a share of the muscle's strength.
 export const NSENS = 29;
+// Hearing (dancing): NAUD sound channels the microphone feeds every creature,
+// read as source { t: 'a', i }: 0 loudness, 1 bass, 2 mids, 3 treble, each
+// 0..1 relative to the recent loudest, and 4 a beat, 1 on an onset and
+// decaying over a fifth of a second. Random and mutated sources pick them only
+// while AUDIO_SRC.on is set (the dancing breeder sets it), so other runs draw
+// the same random numbers as before.
+export const NAUD = 5;
+export const AUDIO_SRC = { on: false };
 // Eyes: two on the head (the template's head part, else the root), placed
 // by an evolvable trait, genome.eyes.spread (0..1): 0 = on the front of the
 // head looking nearly ahead (gaze EYE_GAZE[0] degrees off forward), 1 = on
@@ -95,6 +103,7 @@ export const LIMITS = {
 function randSrc(rng, kind) {
   // kind: 'part' sources a part neuron can read, 'global' for global neurons,
   // 'effector' same as part.
+  if (AUDIO_SRC.on && rng.chance(0.12)) return { t: 'a', i: rng.int(NAUD) };
   const r = rng();
   if (kind === 'global') {
     if (r < 0.25) return { t: 'g', i: rng.int(LIMITS.maxGlobals) };
@@ -513,7 +522,7 @@ function mutateSrc(rng, src, kind) {
   if (rng.chance(0.4)) return randSrc(rng, kind);
   const s = { ...src };
   if (s.t === 'k') s.v = clamp(s.v + rng.gauss() * 0.4, -2, 2);
-  else if (s.i !== undefined) s.i = rng.chance(0.5) ? rng.int(s.t === 's' || s.t === 'rs' ? NSENS : s.t === 'e' ? NEYE : LIMITS.maxNeurons) : s.i;
+  else if (s.i !== undefined) s.i = rng.chance(0.5) ? rng.int(s.t === 's' || s.t === 'rs' ? NSENS : s.t === 'e' ? NEYE : s.t === 'a' ? NAUD : LIMITS.maxNeurons) : s.i;
   return s;
 }
 
@@ -1175,4 +1184,48 @@ function templateStructural(g, rng, opts) {
   ];
   for (let tries = 0; tries < 10; tries++) if (rng.pick(ops)()) break;
   return conform(g);
+}
+
+// ---------------------------------------------------------------- hearing
+
+// every input slot a live part's (or a global) neuron or muscle reads from;
+// a muscle's weighs its block's volume, so ears go to hips, shoulders and
+// spines more than to fingers
+function srcSlots(g) {
+  const slots = [];
+  g.nodes.forEach((nd, i) => {
+    if (nd.on === false) return;
+    const vol = nd.dims[0] * nd.dims[1] * nd.dims[2];
+    for (const nr of nd.neurons) for (const inp of nr.inputs) slots.push({ o: inp, eff: false, wt: 1 });
+    // only the joint's free axes have muscles (and the root, none)
+    if (i > 0 || nd.recur > 1) for (const ax of JOINT_DOFS[nd.joint] || []) { const e = nd.effectors?.[ax]; if (e) slots.push({ o: e, eff: true, wt: vol }); }
+  });
+  for (const nr of g.globals) for (const inp of nr.inputs) slots.push({ o: inp, eff: false, wt: 1 });
+  return slots;
+}
+
+// does any neuron or muscle listen? (muscles: does a muscle, directly)
+export function hears(g, muscles = false) { return srcSlots(g).some(s => s.o.src?.t === 'a' && (s.eff || !muscles)); }
+
+// Rewire n random inputs to the sound channels, mostly muscles (a hip driven
+// by the bass), some neurons (an oscillator sped up by the beat). Through a
+// reflex-held joint a muscle's command sets its target angle, up to half its
+// range each way, so the move shows. (Dancing gives every newcomer ears.)
+export function wireAudio(g, rng, n = 2) {
+  const slots = srcSlots(g);
+  const take = list => {
+    const tot = list.reduce((t, s) => t + s.wt, 0);
+    let r = rng() * tot;
+    for (const s of list) { r -= s.wt; if (r <= 0) return s; }
+    return list[list.length - 1];
+  };
+  for (let k = 0; k < n; k++) {
+    const effs = slots.filter(s => s.eff && s.o.src?.t !== 'a'), ins = slots.filter(s => !s.eff && s.o.src?.t !== 'a');
+    const list = effs.length && (rng.chance(0.7) || !ins.length) ? effs : ins;
+    if (!list.length) break;
+    const s = take(list);
+    s.o.src = { t: 'a', i: rng.int(NAUD) };
+    s.o.w = (rng.chance(0.5) ? 1 : -1) * (s.eff ? rng.range(0.6, 1.5) : rng.range(0.5, 2));
+  }
+  return g;
 }

@@ -36,6 +36,7 @@ evolved together, for the same evolutionary targets Sims used:
 | Skateboarding (beyond Sims) | on a real-world skateboard (0.8 × 0.2 m, 10 cm up) on flat ground, standing on it, or for sprawling animals lying on it with their legs over the side; wheels that roll freely, grip sideways and steer toward whichever side carries more weight, as trucks do | metres ridden per second the way the board pointed at the start, from first touching the board until a fall or stepping off (nothing touching the board for 0.5 s, or the centre of mass 0.3 m past the deck), halved if the ride ends that way, plus the standing bonus. Only feet may touch the deck or the ground; pushing off the ground with a foot is how it gets going |
 | Downhill skateboarding (beyond Sims) | as skateboarding, down a 5° hill, light air drag | as skateboarding (metres downhill per second) |
 | Skateboard slalom (beyond Sims) | as downhill, 4°, through four gates 5 m apart, alternately 1.5 m to either side, so rolling straight passes beside every opening | as skateboarding, but distance past the first gate missed doesn't count; slalom's gate bonus and hit penalty. Steering is by leaning |
+| Dancing (beyond Sims; judged by eye) | a troupe (4 to 16, 9 by default) on flat ground, each hearing the microphone | no score: you pick the dancers you like and breed the next troupe from them, as in Sims' evolved images |
 
 ### Falling over: Sims' rules
 
@@ -564,6 +565,27 @@ they've fallen. Off the board for 0.5 s, or with the centre of mass 0.3 m
 past the deck, the ride is over and counts to where it was last on it.
 Random creatures ridden down a 5° hill rolled 50 m without moving a muscle,
 so downhill is mostly staying on; the slalom asks for steering.
+
+**Dancing** (target): evolution by eye, after Sims' evolved images. The
+dancers hear: five sound channels from the microphone (Dance floor:
+*Listen*), loudness, bass (30–200 Hz), mids (200–2000 Hz) and treble
+(2–8 kHz), each 0..1 over the 40 dB below the loudest heard lately, and a
+beat that jumps to 1 when the bass does and fades over 0.2 s (src/audio.js;
+*Test beat* is a made-up 120 bpm signal). Neurons and muscles read them as
+a new source, `{ t: 'a', i }` (genome.js NAUD), which random and mutated
+inputs pick only while breeding dancers, so every other run draws the same
+random numbers as before and every champion replays exactly. A dancer with
+no muscle reading the sound gets 2–4 links to it, weighted toward big
+blocks (hips, shoulders, spines rather than fingers); through a
+reflex-held joint a muscle's command sets its target angle, so a hip on the
+bass swings with each kick (trained bipeds to a test beat: their most
+affected joints move 0.2–0.5 rad more than in silence). Click dancers to
+pick them (they glow and get a star), then *Breed from picked*: the next
+troupe keeps the picks and fills the floor with their offspring, mutants of
+one or crosses and grafts of two (src/dance.js). The first troupe comes
+from the trained walker where the plan has one, so most can stand. The
+current troupe and the few before it (for *Back*) are kept in the browser.
+`node tools/dancetest.mjs` (PLAN=, TRAINED=1) checks that troupes react.
 
 **Walking is falling forward and catching yourself.** A beginner takes a
 step or two and falls, and rolling the score back 2 s erased exactly those

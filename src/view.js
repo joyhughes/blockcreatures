@@ -19,9 +19,11 @@ export class View {
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
 
-    // a click (not a drag) on a creature in a crowd zooms in on it
+    // a click (not a drag) on a creature in a crowd zooms in on it; with
+    // zoomPick off (dancing) a click only reports it, and a double click zooms
     this.focusCell = -1;
     this.onPick = null;
+    this.zoomPick = true;
     this.raycaster = new THREE.Raycaster();
     let down = null;
     canvas.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
@@ -34,8 +36,17 @@ export class View {
       this.raycaster.setFromCamera(ndc, this.camera);
       const hit = this.raycaster.intersectObjects(this.meshes, false)[0];
       const k = hit ? this.cells.findIndex(c => c.meshes.includes(hit.object)) : -1;
-      this.focus_(k);
-      this.onPick?.(this.focusCell);
+      if (this.zoomPick) { this.focus_(k); this.onPick?.(this.focusCell); } else this.onPick?.(k);
+    });
+    canvas.addEventListener('dblclick', e => {
+      if (this.zoomPick || this.cells.length < 2) return;
+      const r = canvas.getBoundingClientRect();
+      const ndc = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      this.raycaster.setFromCamera(ndc, this.camera);
+      const hit = this.raycaster.intersectObjects(this.meshes, false)[0];
+      const k = hit ? this.cells.findIndex(c => c.meshes.includes(hit.object)) : -1;
+      this.focus_(k === this.focusCell ? -1 : k);
+      this.onZoom?.(this.focusCell);
     });
 
     this.scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x3a3226, 1.2));
@@ -192,7 +203,7 @@ export class View {
     this.arena = !pair ? 0 : sims[0].coop ? reach + sc.goalDist + sc.goalSize : 2 * reach;
     // stairs: each cell holds its whole flight
     const flight = sims[0].statics ? Math.max(...sims.map(s => Math.max(0, ...(s.statics || []).map(b => Math.abs(b.c[0]) + b.h[0])))) : 0;
-    const gap = pair ? Math.max(9, this.arena + 3) : flight ? 2 * flight + 1 : Math.max(3, 2.6 * big);
+    const gap = this.gap = pair ? Math.max(9, this.arena + 3) : flight ? 2 * flight + 1 : Math.max(3, 2.6 * big);
     // ski jumping: hills side by side (across, Z), never end to end
     const hills = !!sims[0].hillPts;
     // cross-country course: everyone on the one course, racing as ghosts
@@ -292,6 +303,25 @@ export class View {
   }
 
   add(o) { this.scene.add(o); this.extras.push(o); }
+
+  // replace cell k's label (dancing: a star on the picked)
+  setLabel(k, text, color = '#ffffff') {
+    const cell = this.cells[k];
+    if (!cell) return;
+    if (cell.label) {
+      this.scene.remove(cell.label);
+      this.extras = this.extras.filter(o => o !== cell.label);
+      cell.label.material.map.dispose(); cell.label.material.dispose();
+    }
+    cell.label = this.cells.length > 9 ? this.textSprite(text, color, 0.12 * this.gap, true) : this.textSprite(text, color, 0.03);
+    cell.label.visible = this.labels && (this.focusCell < 0 || k === this.focusCell);
+    this.add(cell.label);
+  }
+
+  // light up cell k's creature (dancing: the picked glow)
+  highlight(k, on) {
+    for (const m of this.cells[k]?.meshes || []) if (!m.userData.eye && m.material.emissive) m.material.emissive.setHex(on ? 0x7a5a14 : 0x000000);
+  }
 
   setLabels(on) {
     this.labels = on;

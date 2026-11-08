@@ -4,13 +4,13 @@
 // All neurons update in parallel from the previous values; the brain runs two
 // steps per physics step, as in Sims' system.
 //
-// Values: [each part's NSENS sensors | the eyes' NEYE pixels | neurons].
+// Values: [each part's NSENS sensors | the eyes' NEYE pixels | NAUD sound channels | neurons].
 // Hebbian plasticity: a neuron with a learning rate (nr.hebb) changes its
 // input weights during the creature's life by Oja's rule, dw = rate * post *
 // (pre - post * w): inputs that fire with it grow stronger, and the weights
 // stay bounded. Without one the weights are fixed, as before.
 
-import { NSENS, NEYE, JOINT_DOFS, mirrorEye } from './genome.js';
+import { NSENS, NEYE, NAUD, JOINT_DOFS, mirrorEye } from './genome.js';
 
 const FN_IDS = {};
 ['sum', 'product', 'divide', 'sumThreshold', 'greaterThan', 'signOf', 'min', 'max', 'abs', 'if',
@@ -18,8 +18,9 @@ const FN_IDS = {};
   'smooth', 'memory', 'oscWave', 'oscSaw'].forEach((n, i) => { FN_IDS[n] = i; });
 
 export function compileBrain(g, parts) {
-  const S = parts.length * NSENS + NEYE, E0 = parts.length * NSENS;
-  let usesEyes = false;
+  // values: [part sensors | eyes | hearing (NAUD) | neurons]
+  const S = parts.length * NSENS + NEYE + NAUD, E0 = parts.length * NSENS, A0 = E0 + NEYE;
+  let usesEyes = false, usesAudio = false;
   const base = [];            // first neuron index of each part
   let N = 0;
   for (const p of parts) { base.push(N); N += g.nodes[p.node].neurons.length; }
@@ -42,6 +43,7 @@ export function compileBrain(g, parts) {
     switch (src.t) {
       case 's': return [part * NSENS + src.i, 0];
       case 'e': usesEyes = true; return [E0 + ((parts[part]?.d ?? 1) < 0 ? mirrorEye(src.i % NEYE) : src.i % NEYE), 0];
+      case 'a': usesAudio = true; return [A0 + (src.i % NAUD), 0];
       case 'rs': return [src.i, 0];
       case 'n': return [neuronOf(part, src.i), 0];
       case 'rn': return [neuronOf(0, src.i), 0];
@@ -85,7 +87,7 @@ export function compileBrain(g, parts) {
   });
 
   return {
-    S, N, fn, param, nIn, eta, plastic: eta.some(x => x !== 0), usesEyes, E0, origin,
+    S, N, fn, param, nIn, eta, plastic: eta.some(x => x !== 0), usesEyes, E0, usesAudio, A0, origin,
     inIdx: Int32Array.from(inIdx), inW: Float64Array.from(inW), inK: Float64Array.from(inK),
     vals: new Float64Array(S + N), next: new Float64Array(N), state: new Float64Array(N * 2),
     effectors, effOut: new Float64Array(effectors.length),

@@ -64,6 +64,7 @@
   #islandGen { font-weight: 400; color: var(--muted); text-transform: none; letter-spacing: 0; }
   #islandList i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; }
   #islandList span { color: var(--muted); font-size: 11px; }
+  #meter { background: #171a20; border-radius: 6px; }
   @media (max-width: 760px) {
     body { grid-template-columns: 1fr; grid-template-rows: 55vh 1fr; }
     aside { border-left: 0; border-top: 1px solid var(--line); }
@@ -121,6 +122,27 @@
   </div>
   <p class="note" id="planNote"></p>
 
+  <div id="danceBox" hidden>
+    <h2>Dance floor</h2>
+    <div class="row">
+      <button class="primary" id="mic" title="Let the dancers hear the room through your microphone: play some music! The sound never leaves this page">🎤 Listen</button>
+      <button id="testBeat" title="A made-up 120 bpm beat, for trying it out without a microphone (nothing is played)">Test beat</button>
+      <canvas id="meter" width="150" height="34" title="What the dancers hear: loudness, bass, mids, treble and the beat"></canvas>
+    </div>
+    <p class="note" id="micNote">The dancers hear nothing yet.</p>
+    <div class="row" style="margin-top:8px">
+      <button class="primary" id="breed" disabled title="The next troupe: the dancers you picked, and their offspring (mutants of one, or crosses of two)">Breed from picked</button>
+      <button id="danceBack" disabled title="Back to the troupe before this one">Back</button>
+      <button id="danceNew" title="Start again with a new troupe of random (or trained) dancers">New troupe</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label title="How different offspring are from their parents">Offspring <select id="danceMut"><option value="gentle">close to parents</option><option value="normal" selected>varied</option><option value="wild">wild</option></select></label>
+      <label title="Dancers on the floor (a new troupe)">Dancers <select id="danceSize"><option>4</option><option>6</option><option selected>9</option><option>12</option><option>16</option></select></label>
+    </div>
+    <p class="note" id="danceNote"></p>
+  </div>
+
+  <div id="evoBox">
   <h2>Evolution</h2>
   <div class="row">
     <label>Population <input type="number" id="pop" value="300" min="20" max="2000" step="10"></label>
@@ -161,6 +183,7 @@
       <button id="mate" title="Cross every island's best with every other island's best; show the hybrids and add the best to the islands">Mate island bests</button>
     </div>
     <p class="note" id="mateNote"></p>
+  </div>
   </div>
 
   <h2>Scene</h2>
@@ -263,10 +286,12 @@
   <div class="row" style="margin-top:8px"><button id="scReset" title="Restore the default scene">Default scene</button></div>
   <p class="note" id="sceneNote"></p>
 
+  <div id="gensBox">
   <h2>Best of each generation</h2>
   <div id="gens"></div>
   <div class="row" style="margin-top:8px">
     <label><input type="checkbox" id="follow" checked> Watch latest</label>
+  </div>
   </div>
 
   <h2>Genotype</h2>

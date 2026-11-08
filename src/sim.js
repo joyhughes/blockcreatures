@@ -10,11 +10,15 @@
 // here rather than by the engine, as in Sims' system.
 
 import RAPIER from './rapier.js';
-import { develop, interpenetrates, tooBig, bounds, JOINT_DOFS, NSENS, NEYE, EYE_H, EYE_V, EYE_CH, EYE_RANGE, EYE_GAZE, EYE_SPREAD, eyeIndex, TEMPLATES } from './genome.js';
+import { develop, interpenetrates, tooBig, bounds, JOINT_DOFS, NSENS, NEYE, EYE_H, EYE_V, EYE_CH, EYE_RANGE, EYE_GAZE, EYE_SPREAD, eyeIndex, TEMPLATES, NAUD } from './genome.js';
 import { compileBrain, brainStep, initBrain, learnedWeights, applyLearned } from './brain.js';
 import { quatFromMat, qmul, qconj, qrot, qlog, dot, sub, add, scale, cross, len } from './math.js';
 
 let ready = null;
+// Dancing: the sound the microphone hears now (genome.js NAUD channels),
+// written by the page every frame and read by every creature that listens.
+// Elsewhere (workers, tests) it stays silent.
+export const AUDIO = new Float64Array(NAUD);
 export function initPhysics() { return (ready ||= RAPIER.init()); }
 
 export const DT = 1 / 60;
@@ -138,9 +142,13 @@ export const TASKS = {
   // javelin pre-training: take the javelin off its stand in the hands, lift
   // it and hold it up; no throwing (scene grabOnly)
   javelinGrab: { label: 'Javelin grip', env: 'land', duration: 10, settle: 1, trials: 1, kind: 'throw', scene: { settle: 'timed', ball: 'javelin', ballSize: 0.6, implMass: 0.01, grab: true, grabOnly: true } },
+  // Dancing: no score; the person watching picks the dancers they like and
+  // breeds the next lot from them (main.js, dance.js), as in Sims' evolved
+  // images. The dancers hear the microphone (genome.js NAUD).
+  dance: { label: 'Dancing', env: 'land', duration: 60, settle: 1, trials: 1, kind: 'dance', interactive: true, scene: { settle: 'timed' } },
 };
 // targets that came after scenes: a run without one has no legacy scene
-const NEW_KINDS = ['cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright', 'getup', 'stand', 'knock', 'ski', 'spin', 'throw', 'skijump', 'skate'];
+const NEW_KINDS = ['dance', 'cooperate', 'volley', 'wrestle', 'climb', 'lift', 'upright', 'getup', 'stand', 'knock', 'ski', 'spin', 'throw', 'skijump', 'skate'];
 
 // Scene parameters, adjustable per run (the UI's Scene section). A run's
 // scene travels with its jobs, history and champions; a saved creature
@@ -1073,6 +1081,7 @@ export class Creature {
   sense(world, target, other) {
     const S = this.sens;
     S.fill(0, 0, this.brain.S);
+    if (this.brain.usesAudio) S.set(AUDIO, this.brain.A0);
     for (const j of this.joints) {
       const qp = this.bq[j.pb], qc = this.bq[j.cb];
       // swing-twist decomposition in the joint frame: twist about X (the
@@ -1614,7 +1623,8 @@ export class Sim {
     // measuring starts at tStart: after the fixed settle time, or (relaxing)
     // once every body is still
     this.tStart = this.relaxing ? null : task.settle;
-    this.totalSteps = this.relaxing ? Infinity : Math.round((task.settle + this.T) / DT);
+    // dancing goes on until the next generation
+    this.totalSteps = this.relaxing || task.kind === 'dance' ? Infinity : Math.round((task.settle + this.T) / DT);
     this.failed = this.creatures.map(c => !c.valid);
     this.e0 = this.energy();
     this.xMin = 0;
@@ -2885,6 +2895,7 @@ export class Sim {
   // fitness of each creature in this trial
   fitness() {
     const task = this.task, T = this.T;
+    if (task.kind === 'dance') return this.creatures.map(() => 0);   // judged by eye
     if (this.coop) {
       // shared: 0.8 x the share of the way the ball got to the goal's edge,
       // plus 0.2 x the share of their distance to the ball the two closed on
