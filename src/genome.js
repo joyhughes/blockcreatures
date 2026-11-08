@@ -645,6 +645,46 @@ export function mutate(g, rng, amount = 1.5, opts) {
   return tpl ? conform(g) : gc(g);
 }
 
+// Body-only mutation (dancing: bodies evolve by eye too). mutate() spreads
+// about `amount` changes over every site, and a brain has hundreds of them
+// to the body's few dozen, so a child's body almost never changed. This
+// spreads `amount` changes over the body alone, a bit larger than mutate's:
+// block sizes, joint types, chain lengths, where and at what angle and scale
+// parts attach, shapes (round parts) and, in templates, optional parts.
+export function mutateBody(g, rng, amount = 1.5, opts) {
+  const tpl = TEMPLATES[g.plan?.type];
+  const live = g.nodes.filter(nd => nd.on !== false);
+  // parts by size (the square root of volume), so a torso or a thigh changes
+  // more often than one of a hand's many finger segments
+  const wts = live.map(nd => Math.sqrt(nd.dims[0] * nd.dims[1] * nd.dims[2]));
+  const tot = wts.reduce((a, b) => a + b, 0);
+  const pickNode = () => { let r = rng() * tot; for (let k = 0; k < live.length; k++) { r -= wts[k]; if (r <= 0) return live[k]; } return live[live.length - 1]; };
+  const ops = [
+    [3, nd => { const k = rng.int(3); nd.dims[k] = clamp(nd.dims[k] * Math.exp(rng.gauss() * 0.4), LIMITS.dimMin, LIMITS.dimMax); }],
+    [1, nd => { const f = Math.exp(rng.gauss() * 0.3); nd.dims = nd.dims.map(x => clamp(x * f, LIMITS.dimMin, LIMITS.dimMax)); }],   // the whole part bigger or smaller
+    [0.5, nd => { nd.joint = rng.pick(JOINTS); }],
+    [0.5, nd => { nd.recur = clamp(nd.recur + (rng.chance(0.5) ? 1 : -1), 1, LIMITS.recurMax); }],
+    [opts?.round ? 0.5 : 0, nd => { nd.shape = randShape(rng, opts); }],
+    [2, nd => {
+      if (!nd.conns.length) return;
+      const c = rng.pick(nd.conns), k = rng.int(4);
+      if (k === 0) c.u = clamp(c.u + rng.gauss() * 0.4, -1, 1);
+      else if (k === 1) c.v = clamp(c.v + rng.gauss() * 0.4, -1, 1);
+      else if (k === 2) { const a = rng.int(3); c.rot[a] = a === 0 ? wrapAngle(c.rot[a] + rng.gauss() * 0.8) : clamp(c.rot[a] + rng.gauss() * 0.4, -1, 1); }
+      else c.scale = clamp(c.scale * Math.exp(rng.gauss() * 0.3), LIMITS.scaleMin, LIMITS.scaleMax);
+    }],
+    [tpl ? 0.5 : 0, () => { const os = g.nodes.filter(nd => tpl.roles[nd.role]?.optional); if (os.length) { const nd = rng.pick(os); nd.on = !nd.on; } }],
+  ];
+  const wsum = ops.reduce((t, o) => t + o[0], 0);
+  const n = Math.max(1, Math.round(amount * (0.5 + rng())));
+  for (let k = 0; k < n && live.length; k++) {
+    let r = rng() * wsum;
+    const op = ops.find(o => (r -= o[0]) <= 0) || ops[0];
+    op[1](pickNode());
+  }
+  return tpl ? conform(g) : gc(g);
+}
+
 // One guaranteed change to the body's structure, as opposed to the parameter
 // tweaks that make up almost all of mutate(): about 1.5 changes per child, of
 // which a new part is ~2%. Without these, evolution keeps refining the

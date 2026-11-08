@@ -582,7 +582,14 @@ bass swings with each kick (trained bipeds to a test beat: their most
 affected joints move 0.2–0.5 rad more than in silence). Click dancers to
 pick them (they glow and get a star), then *Breed from picked*: the next
 troupe keeps the picks and fills the floor with their offspring, mutants of
-one or crosses and grafts of two (src/dance.js). The first troupe comes
+one or crosses and grafts of two (src/dance.js). Bodies evolve too
+(Dance floor: *Bodies*): plain mutation spreads its ~1.5 changes over every
+gene, and a brain's hundreds of genes left a child's body almost never
+changed, so each child also gets body-only changes (genome.js mutateBody: 4
+by default, 8 wild), on parts picked by size so torsos and legs change
+more than finger segments: block sizes, joints, chain lengths, attachments,
+optional parts. Children of a trained biped then differ by 10-30% in volume
+and still stand. The first troupe comes
 from the trained walker where the plan has one, so most can stand. The
 current troupe and the few before it (for *Back*) are kept in the browser.
 `node tools/dancetest.mjs` (PLAN=, TRAINED=1) checks that troupes react.

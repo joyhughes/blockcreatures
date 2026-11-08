@@ -1,15 +1,19 @@
 // Dancing: evolution by eye, after Sims' evolved images. A small troupe dances
 // to whatever the microphone hears; the person watching picks the ones they
 // like, and the next troupe is the picked dancers themselves plus their
-// offspring: mutants of one, or (with two or more picked) crosses and grafts
+// offspring, bodies and brains: mutants of one, or (with two or more picked) crosses and grafts
 // of two. There is no score. Every newcomer gets ears (genome.js wireAudio)
 // unless a muscle already listens, so the troupe always reacts to the sound.
 
 import { Evolver } from './evolve.js';
-import { mutate, crossover, graft, structural, clone, hears, wireAudio, AUDIO_SRC } from './genome.js';
+import { mutate, mutateBody, crossover, graft, structural, clone, hears, wireAudio, AUDIO_SRC } from './genome.js';
 
 // how hard offspring differ from their parents (genome.js mutate amount)
 export const DANCE_MUTATION = { gentle: 0.75, normal: 1.5, wild: 3 };
+// how much offspring's bodies change: body-only changes per child (genome.js
+// mutateBody), and the share also given a structural change (a part on or
+// off, a chain longer or shorter, a new limb...)
+export const DANCE_BODY = { fixed: [0, 0], evolve: [4, 0.4], wild: [8, 0.7] };
 
 const withEars = fn => { AUDIO_SRC.on = true; try { return fn(); } finally { AUDIO_SRC.on = false; } };
 
@@ -32,17 +36,26 @@ export class Troupe {
 
   // a first troupe: random bodies of the plan, or mutants of a starter genome
   // (a trained walker, which can stand: much better on its feet)
-  start(starter = null, amount = 1.5) {
+  // (from a starter, all but the first copy get body changes too)
+  start(starter = null, amount = 1.5, bodies = 'evolve') {
     withEars(() => {
       if (starter) this.ev.seedFrom(starter, { amount, copies: 1 });
       else this.ev.seed();
     });
-    this.gens = [{ dancers: this.ev.pop.map(p => this.ears(clone(p.g))), parents: [] }];
+    const [bodyAmt] = DANCE_BODY[bodies] ?? DANCE_BODY.evolve;
+    this.gens = [{ dancers: this.ev.pop.map((p, k) => this.ears(starter && k && bodyAmt ? this.reshape(p.g, bodyAmt) : clone(p.g))), parents: [] }];
+  }
+
+  // a body-changed copy of g that is still viable (else g as it was)
+  reshape(g, amt) {
+    for (let k = 0; k < 20; k++) { const m = this.ev.withArm(mutateBody(clone(g), this.rng, amt, this.ev.body)); if (this.ev.ok(m)) return m; }
+    return clone(g);
   }
 
   // the next troupe from the dancers picked (indices into the current one)
-  breed(picked, mutation = 'normal') {
+  breed(picked, mutation = 'normal', bodies = 'evolve') {
     const amount = DANCE_MUTATION[mutation] ?? 1.5;
+    const [bodyAmt, bodyStruct] = DANCE_BODY[bodies] ?? DANCE_BODY.evolve;
     const parents = picked.map(k => this.dancers[k]).filter(Boolean);
     if (!parents.length) return false;
     const rng = this.rng, ev = this.ev;
@@ -58,8 +71,9 @@ export class Troupe {
             while (b === a) b = rng.pick(parents);
             g = rng.chance(0.6) ? crossover(a, b, rng) : graft(a, b, rng);
             mutate(g, rng, amount / 2, ev.body);
-          } else if (rng.chance(0.2)) g = mutate(structural(clone(a), rng, ev.body), rng, amount / 2, ev.body);
-          else g = mutate(clone(a), rng, amount, ev.body);
+          } else g = mutate(clone(a), rng, amount, ev.body);
+          if (bodyStruct && rng.chance(bodyStruct)) g = structural(g, rng, ev.body);
+          if (bodyAmt) g = mutateBody(g, rng, bodyAmt, ev.body);
           g = ev.withArm(g);
           if (ev.ok(g)) child = g;
         }

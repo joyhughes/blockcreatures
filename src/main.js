@@ -318,7 +318,7 @@ function saveTroupe() {
 function newTroupe() {
   const b = body();
   troupe = new Troupe({ body: b, size: +$('danceSize').value, seed: +$('seed').value + Math.floor(Math.random() * 1e6) });
-  troupe.start(b.trained ? STARTERS[b.plan.type].genome : null);
+  troupe.start(b.trained ? STARTERS[b.plan.type].genome : null, 1.5, $('danceBody').value);
   troupe.gen0 = 0;
   troupes.set(runKey(), troupe);
   saveTroupe();
@@ -359,7 +359,7 @@ function danceUI() {
   $('breed').textContent = picked.size ? `Breed from ${picked.size} picked` : 'Breed from picked';
   $('danceBack').disabled = troupe.gens.length < 2;
   const n = troupe.gen + (troupe.gen0 || 0);
-  $('danceNote').textContent = `Troupe ${n + 1}. Click the dancers you like (they glow and get a star; click again to unpick), then Breed: the next troupe keeps them and fills the floor with their offspring: mutants of one, or with two or more picked, crosses of two. Double-click a dancer to zoom in, Esc to zoom out.`
+  $('danceNote').textContent = `Troupe ${n + 1}. Click the dancers you like (they glow and get a star; click again to unpick), then Breed: the next troupe keeps them and fills the floor with their offspring, bodies and brains: mutants of one, or with two or more picked, crosses of two (Bodies sets how much the bodies change). Double-click a dancer to zoom in, Esc to zoom out.`
     + (troupe.dancers[0]?.plan && body().trained ? ' The first troupe came from the trained walker, so most can stand.' : '');
 }
 function showDance() {
@@ -374,7 +374,7 @@ function showDance() {
 }
 $('breed').onclick = () => {
   if (!picked.size) return;
-  troupe.breed([...picked].sort((a, b) => a - b), $('danceMut').value);
+  troupe.breed([...picked].sort((a, b) => a - b), $('danceMut').value, $('danceBody').value);
   if (troupe.gens.length > DANCE_KEEP) { troupe.gens.shift(); troupe.gen0 = (troupe.gen0 || 0) + 1; }
   saveTroupe();
   showTroupe();
